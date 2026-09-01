@@ -1,0 +1,9 @@
+{
+  "id": "obsidian-smart-notes",
+  "name": "Smart Notes Organizer",
+  "version": "0.1.0",
+  "minAppVersion": "1.4.0",
+  "description": "智能笔记自动分类与文件夹整理：四层可切换引擎（规则映射 / TF-IDF 相似度 / 本地大模型 / 社区共享配置），免费且本地优先。",
+  "author": "MonkeyCode",
+  "isDesktopOnly": false
+}
