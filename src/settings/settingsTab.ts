@@ -207,6 +207,7 @@ export class SuggestConfirmModal extends Modal {
   onOpen(): void {
     const { contentEl } = this;
     contentEl.empty();
+    contentEl.addClass("smart-notes-confirm");
     contentEl.createEl("h3", { text: "整理建议" });
     contentEl.createEl("p", {
       text: `「${this.fileName}」建议移动到：`,
@@ -222,9 +223,8 @@ export class SuggestConfirmModal extends Modal {
 
     const reasonEl = contentEl.createEl("p", {
       text: `依据（${this.engineName}）：${this.reason}`,
+      cls: "smart-notes-reason",
     });
-    reasonEl.style.color = "var(--text-muted)";
-    reasonEl.style.fontSize = "0.85em";
 
     new Setting(contentEl)
       .addButton((b) =>
@@ -256,6 +256,7 @@ export class SmartNotesSettingTab extends PluginSettingTab {
   display(): void {
     const { containerEl } = this;
     containerEl.empty();
+    containerEl.addClass("smart-notes-settings");
     const settings = this.plugin.settings;
 
     // ===== 引擎选择 =====
@@ -537,9 +538,8 @@ export class SmartNotesSettingTab extends PluginSettingTab {
       for (const entry of entries.slice(0, 20)) {
         const line = containerEl.createEl("p", {
           text: `${entry.time.slice(0, 16).replace("T", " ")}  ${entry.file}: ${entry.from || "(根)"} -> ${entry.to}  [${entry.engine}]`,
+          cls: "smart-notes-log-line",
         });
-        line.style.fontSize = "0.85em";
-        line.style.margin = "2px 0";
       }
     });
   }
@@ -547,7 +547,7 @@ export class SmartNotesSettingTab extends PluginSettingTab {
   /** 渲染规则列表（按顺序即优先级，支持上下移动 / 启停 / 删除） */
   private renderRules(): void {
     const settings = this.plugin.settings;
-    const wrap = this.containerEl.createDiv();
+    const wrap = this.containerEl.createDiv({ cls: "smart-notes-rules" });
     settings.rules.forEach((rule, index) => {
       const setting = new Setting(wrap)
         .setName(`${index + 1}. ${rule.name}`)

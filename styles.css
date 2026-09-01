@@ -1,0 +1,52 @@
+/* Obsidian Smart Notes Organizer 插件样式 */
+
+/* ===== 建议确认弹窗 ===== */
+.smart-notes-confirm h3 {
+  margin-top: 0;
+  color: var(--text-accent);
+}
+
+.smart-notes-confirm input[type="text"] {
+  margin: 8px 0 4px;
+  font-size: 1em;
+}
+
+.smart-notes-confirm .smart-notes-reason {
+  color: var(--text-muted);
+  font-size: 0.85em;
+  margin: 4px 0 8px;
+}
+
+/* ===== 设置面板 ===== */
+.smart-notes-settings h2 {
+  border-bottom: 1px solid var(--background-modifier-border);
+  padding-bottom: 6px;
+  margin-top: 24px;
+}
+
+.smart-notes-settings h3 {
+  color: var(--text-normal);
+  margin-bottom: 4px;
+}
+
+/* 规则列表行 */
+.smart-notes-rules .setting-item {
+  padding-top: 6px;
+  padding-bottom: 6px;
+}
+
+.smart-notes-rules .setting-item-info {
+  flex: 1 1 auto;
+}
+
+.smart-notes-rules .setting-item-description {
+  word-break: break-all;
+}
+
+/* 最近整理记录 */
+.smart-notes-settings .smart-notes-log-line {
+  font-size: 0.85em;
+  margin: 2px 0;
+  font-family: var(--font-monospace);
+  color: var(--text-muted);
+}
