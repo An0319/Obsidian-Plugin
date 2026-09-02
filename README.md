@@ -1,5 +1,7 @@
 # Smart Notes Organizer — Obsidian 本地语义书签
 
+[English](./README.en.md) | 中文
+
 把文件扔进 Inbox，点击运行，插件自动判断该文件在语义上离 Vault 中哪个文件夹最近，然后执行移动。
 
 **一句话定位：无需联网、无需等待、永不掉线的智能归档。**
