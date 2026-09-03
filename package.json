@@ -1,6 +1,6 @@
 {
   "name": "obsidian-smart-notes",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Obsidian 智能笔记整理插件：四层可切换引擎，自动分类与文件夹整理，免费、本地优先",
   "main": "main.js",
   "type": "module",

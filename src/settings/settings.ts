@@ -27,8 +27,6 @@ export interface SmartNotesSettings {
   // ---- 通用设置 ----
   /** 启用自动整理（监听新建/重命名事件） */
   autoOrganize: boolean;
-  /** 自动整理前弹窗确认（false = 静默移动） */
-  confirmBeforeMove: boolean;
   /** Inbox 文件夹名 */
   inboxFolder: string;
   /** 未匹配时的目标文件夹（空 = 保留原位） */
@@ -57,7 +55,6 @@ export const DEFAULT_SETTINGS: SmartNotesSettings = {
   sharedConfigOverlay: false,
 
   autoOrganize: true,
-  confirmBeforeMove: true,
   inboxFolder: "Inbox",
   unclassifiedFolder: "",
   excludedFolders: [".obsidian", ".trash", "模板", "attachments"],

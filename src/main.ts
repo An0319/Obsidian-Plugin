@@ -1,10 +1,6 @@
 import { Plugin, TFile, Notice } from "obsidian";
 import { SmartNotesSettings, DEFAULT_SETTINGS } from "./settings/settings";
-import {
-  SmartNotesSettingTab,
-  obsidianHttp,
-  SuggestConfirmModal,
-} from "./settings/settingsTab";
+import { SmartNotesSettingTab, obsidianHttp } from "./settings/settingsTab";
 import { EngineDispatcher } from "./scheduler/dispatcher";
 import { OrganizerService } from "./scheduler/organizerService";
 import { RuleEngine } from "./engines/ruleEngine";
@@ -138,7 +134,7 @@ export default class SmartNotesPlugin extends Plugin {
         const file = this.app.workspace.getActiveFile();
         if (!file || file.extension !== "md") return false;
         if (checking) return true;
-        void this.organizeFileInteractive(file);
+        void this.organizeCurrentNote(file);
         return true;
       },
     });
@@ -209,26 +205,22 @@ export default class SmartNotesPlugin extends Plugin {
     return true;
   }
 
-  /** 自动整理：按 confirmBeforeMove 决定静默或弹窗 */
+  /** 自动整理：静默移动，完成后以 Notice 通知结果 */
   private async autoOrganize(file: TFile): Promise<void> {
     try {
-      if (this.settings.confirmBeforeMove) {
-        await this.organizeFileInteractive(file);
-      } else {
-        const result = await this.organizerService.organizeOne(file, "auto");
-        if (result.moved && result.suggestion) {
-          new Notice(
-            `已将「${file.basename}」移至 ${result.suggestion.suggestedPath}（${result.suggestion.reason}）`
-          );
-        }
+      const result = await this.organizerService.organizeOne(file, "auto");
+      if (result.moved && result.suggestion) {
+        new Notice(
+          `已将「${file.basename}」移至 ${result.suggestion.suggestedPath}（${result.suggestion.reason}）`
+        );
       }
     } catch (err) {
       console.error("[SmartNotes] 自动整理失败", err);
     }
   }
 
-  /** 整理单个文件（带确认弹窗） */
-  private async organizeFileInteractive(file: TFile): Promise<void> {
+  /** 整理单个文件：直接执行，全程无弹窗 */
+  private async organizeCurrentNote(file: TFile): Promise<void> {
     const { suggestion } = await this.organizerService.analyze(file);
     if (!suggestion) {
       new Notice("所有引擎均无法给出建议，请检查引擎配置");
@@ -237,18 +229,6 @@ export default class SmartNotesPlugin extends Plugin {
     if (!suggestion.suggestedPath) {
       new Notice(`暂无合适建议：${suggestion.reason}`);
       return;
-    }
-
-    if (this.settings.confirmBeforeMove) {
-      const confirmedPath = await SuggestConfirmModal.confirm(
-        this.app,
-        file.basename,
-        suggestion.suggestedPath,
-        suggestion.reason,
-        `层级${suggestion.engine}`
-      );
-      if (confirmedPath === null) return;
-      suggestion.suggestedPath = confirmedPath;
     }
 
     this.internalMove = true;
@@ -279,22 +259,15 @@ export default class SmartNotesPlugin extends Plugin {
   /** 整理 Inbox 命令：带进度与结果摘要 */
   private async organizeInboxCommand(): Promise<void> {
     const progress = new Notice("开始整理…", 0);
-    const result = await this.organizerService.organizeInbox(
-      this.settings.confirmBeforeMove ? "manual" : "auto",
-      (done, total, name) => {
-        progress.setMessage(`整理中 ${done}/${total}：${name}`);
-      }
-    );
+    const result = await this.organizerService.organizeInbox("auto", (done, total, name) => {
+      progress.setMessage(`整理中 ${done}/${total}：${name}`);
+    });
     progress.hide();
 
-    if (this.settings.confirmBeforeMove) {
-      new Notice(`整理完成：移动 ${result.moved} 篇，跳过 ${result.skipped} 篇`);
-    } else {
-      new Notice(
-        `整理完成：移动 ${result.moved} 篇，跳过 ${result.skipped} 篇` +
-          (result.errors.length ? `，失败 ${result.errors.length} 篇` : "")
-      );
-    }
+    new Notice(
+      `整理完成：移动 ${result.moved} 篇，跳过 ${result.skipped} 篇` +
+        (result.errors.length ? `，失败 ${result.errors.length} 篇` : "")
+    );
     if (result.errors.length > 0) {
       console.warn("[SmartNotes] 整理错误：", result.errors);
     }

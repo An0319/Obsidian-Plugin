@@ -123,10 +123,11 @@ class RuleEditModal extends Modal {
       .addDropdown((d) =>
         d
           .addOptions({
-            [RuleField.Title]: "标题包含域",
+            [RuleField.Title]: "标题",
             [RuleField.Content]: "笔记内容",
             [RuleField.Tag]: "标签",
-            [RuleField.Filename]: "文件路径",
+            [RuleField.Filename]: "文件名 / 路径",
+            [RuleField.ModifiedTime]: "修改时间",
           })
           .setValue(rule.field)
           .onChange((v) => (rule.field = v as RuleField))
@@ -140,14 +141,34 @@ class RuleEditModal extends Modal {
             [RuleOperator.Contains]: "包含",
             [RuleOperator.Equals]: "等于",
             [RuleOperator.Regex]: "正则表达式",
+            [RuleOperator.OlderThanDays]: "超过 N 天未修改",
+            [RuleOperator.Always]: "无条件命中（兜底）",
           })
           .setValue(rule.operator)
           .onChange((v) => (rule.operator = v as RuleOperator))
       );
 
-    new Setting(contentEl).setName("匹配模式").addText((t) =>
-      t.setPlaceholder("如：投资 或 ^\\d{4}-\\d{2}-\\d{2}$").setValue(rule.pattern).onChange((v) => (rule.pattern = v))
-    );
+    new Setting(contentEl)
+      .setName("匹配模式")
+      .setDesc(
+        rule.operator === RuleOperator.OlderThanDays
+          ? "填写天数，如：30 表示超过 30 天未修改"
+          : rule.operator === RuleOperator.Always
+            ? "兜底规则无需填写"
+            : "如：投资 或 ^\\d{4}-\\d{2}-\\d{2}"
+      )
+      .addText((t) =>
+        t
+          .setPlaceholder(
+            rule.operator === RuleOperator.OlderThanDays
+              ? "30"
+              : rule.operator === RuleOperator.Always
+                ? ""
+                : "如：投资 或 ^\\d{4}-\\d{2}-\\d{2}$"
+          )
+          .setValue(rule.pattern)
+          .onChange((v) => (rule.pattern = v))
+      );
 
     new Setting(contentEl).setName("目标文件夹").addText((t) =>
       t.setPlaceholder("如：02-战略/竞品").setValue(rule.targetFolder).onChange((v) => (rule.targetFolder = v))
@@ -158,14 +179,18 @@ class RuleEditModal extends Modal {
         b
           .setButtonText("保存")
           .setCta()
-          .onClick(() => {
-            if (!rule.name || !rule.pattern) {
-              new Notice("规则名称与匹配模式不能为空");
-              return;
-            }
-            this.onSave(rule);
-            this.close();
-          })
+            .onClick(() => {
+              if (!rule.name) {
+                new Notice("规则名称不能为空");
+                return;
+              }
+              if (rule.operator !== RuleOperator.Always && !rule.pattern) {
+                new Notice("匹配模式不能为空");
+                return;
+              }
+              this.onSave(rule);
+              this.close();
+            })
       )
       .addButton((b) => b.setButtonText("取消").onClick(() => this.close()));
   }
@@ -175,72 +200,19 @@ class RuleEditModal extends Modal {
   }
 }
 
-/** 建议确认弹窗：移动前展示建议路径，用户可修改 */
-export class SuggestConfirmModal extends Modal {
-  private confirmed: ((path: string | null) => void) | null = null;
-
-  constructor(
-    app: App,
-    private fileName: string,
-    private suggestedPath: string,
-    private reason: string,
-    private engineName: string
-  ) {
-    super(app);
-  }
-
-  /** 返回用户确认的路径；取消返回 null */
-  static confirm(
-    app: App,
-    fileName: string,
-    suggestedPath: string,
-    reason: string,
-    engineName: string
-  ): Promise<string | null> {
-    const modal = new SuggestConfirmModal(app, fileName, suggestedPath, reason, engineName);
-    return new Promise((resolve) => {
-      modal.confirmed = resolve;
-      modal.open();
-    });
-  }
-
-  onOpen(): void {
-    const { contentEl } = this;
-    contentEl.empty();
-    contentEl.addClass("smart-notes-confirm");
-    contentEl.createEl("h3", { text: "整理建议" });
-    contentEl.createEl("p", {
-      text: `「${this.fileName}」建议移动到：`,
-    });
-
-    let inputValue = this.suggestedPath;
-    const input = contentEl.createEl("input", {
-      type: "text",
-      value: this.suggestedPath,
-    });
-    input.style.width = "100%";
-    input.addEventListener("input", () => (inputValue = input.value));
-
-    const reasonEl = contentEl.createEl("p", {
-      text: `依据（${this.engineName}）：${this.reason}`,
-      cls: "smart-notes-reason",
-    });
-
-    new Setting(contentEl)
-      .addButton((b) =>
-        b
-          .setButtonText("移动")
-          .setCta()
-          .onClick(() => this.confirmed?.(inputValue.trim() || null))
-      )
-      .addButton((b) =>
-        b.setButtonText("跳过").onClick(() => this.confirmed?.(null))
-      );
-  }
-
-  onClose(): void {
-    this.confirmed?.(null);
-    this.contentEl.empty();
+/** 生成规则的人类可读描述（用于规则列表展示） */
+function describeRule(rule: OrganizeRule): string {
+  switch (rule.operator) {
+    case RuleOperator.Regex:
+      return `文件名 / 路径 匹配「${rule.pattern}」`;
+    case RuleOperator.Equals:
+      return `${rule.field} 等于「${rule.pattern}」`;
+    case RuleOperator.OlderThanDays:
+      return `修改时间超过 ${rule.pattern} 天`;
+    case RuleOperator.Always:
+      return "无条件命中";
+    default:
+      return `${rule.field} 包含「${rule.pattern}」`;
   }
 }
 
@@ -283,17 +255,17 @@ export class SmartNotesSettingTab extends PluginSettingTab {
     containerEl.createEl("h3", { text: "层级一：规则映射" });
     this.renderRules();
     new Setting(containerEl)
-      .setName("内置规则模板")
-      .setDesc("一键导入通用规则模板（投资笔记 / 会议记录 / 日记 / 待办）")
+      .setName("种子规则集")
+      .setDesc("一键导入默认规则（日志归位 / 归档陈旧笔记 / 收件箱兜底），已有同名规则会跳过")
       .addButton((b) =>
-        b.setButtonText("导入模板").onClick(async () => {
+        b.setButtonText("导入种子规则").onClick(async () => {
           const { defaultRules } = await import("../engines/ruleEngine");
           const existing = new Set(settings.rules.map((r) => r.id));
           const incoming = defaultRules().filter((r) => !existing.has(r.id));
           settings.rules.push(...incoming);
           await this.plugin.saveSettings();
           this.display();
-          new Notice(`已导入 ${incoming.length} 条模板规则`);
+          new Notice(`已导入 ${incoming.length} 条种子规则`);
         })
       );
 
@@ -470,15 +442,6 @@ export class SmartNotesSettingTab extends PluginSettingTab {
         })
       );
     new Setting(containerEl)
-      .setName("移动前确认")
-      .setDesc("开启后展示建议弹窗，可修改目标路径；关闭则静默移动")
-      .addToggle((t) =>
-        t.setValue(settings.confirmBeforeMove).onChange(async (v) => {
-          settings.confirmBeforeMove = v;
-          await this.plugin.saveSettings();
-        })
-      );
-    new Setting(containerEl)
       .setName("Inbox 文件夹名")
       .setDesc("自动整理只处理该文件夹内的新笔记；留空则处理全库")
       .addText((t) =>
@@ -545,15 +508,12 @@ export class SmartNotesSettingTab extends PluginSettingTab {
   }
 
   /** 渲染规则列表（按顺序即优先级，支持上下移动 / 启停 / 删除） */
-  private renderRules(): void {
-    const settings = this.plugin.settings;
+  private renderRules(): void {    const settings = this.plugin.settings;
     const wrap = this.containerEl.createDiv({ cls: "smart-notes-rules" });
     settings.rules.forEach((rule, index) => {
       const setting = new Setting(wrap)
         .setName(`${index + 1}. ${rule.name}`)
-        .setDesc(
-          `${rule.field} ${rule.operator === "regex" ? "匹配" : rule.operator === "equals" ? "等于" : "包含"}「${rule.pattern}」 → ${rule.targetFolder}`
-        );
+        .setDesc(`${describeRule(rule)} → ${rule.targetFolder}`);
       setting.addToggle((t) =>
         t.setValue(rule.enabled).onChange(async (v) => {
           rule.enabled = v;

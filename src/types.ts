@@ -20,6 +20,8 @@ export enum RuleField {
   Content = "content",
   Tag = "tag",
   Filename = "filename",
+  /** 文件修改时间（配合 OlderThanDays 使用） */
+  ModifiedTime = "mtime",
 }
 
 /** 层级一规则：匹配方式 */
@@ -27,6 +29,10 @@ export enum RuleOperator {
   Contains = "contains",
   Equals = "equals",
   Regex = "regex",
+  /** 修改时间早于 N 天前（pattern 为天数，如 "30"） */
+  OlderThanDays = "older_than_days",
+  /** 无条件命中（兜底规则，pattern 留空） */
+  Always = "always",
 }
 
 /** 层级一：单条规则 */
@@ -127,8 +133,14 @@ export interface IOrganizeEngine {
    * @param title 笔记标题（不含扩展名）
    * @param content 笔记正文（Markdown 文本）
    * @param filePath 笔记当前路径
+   * @param mtime 文件最后修改时间（毫秒时间戳），供时间类规则使用
    */
-  analyze(title: string, content: string, filePath: string): Promise<Suggestion>;
+  analyze(
+    title: string,
+    content: string,
+    filePath: string,
+    mtime?: number
+  ): Promise<Suggestion>;
   /** 可选初始化（如扫描文件夹、加载缓存） */
   initialize?(): Promise<void>;
   /** 可选清理 */

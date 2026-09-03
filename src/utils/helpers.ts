@@ -28,17 +28,36 @@ export function baseName(path: string): string {
   return dot > 0 ? name.slice(0, dot) : name;
 }
 
+/** 一天的毫秒数 */
+const DAY_MS = 24 * 60 * 60 * 1000;
+
 /**
  * 评估单条规则是否命中
+ * @param mtime 文件最后修改时间（毫秒时间戳），时间类规则必需
  * @returns 命中返回 true；规则非法（如正则无效）返回 false
  */
 export function matchRule(
   rule: OrganizeRule,
   title: string,
   content: string,
-  filePath: string
+  filePath: string,
+  mtime?: number
 ): boolean {
-  if (!rule.enabled || !rule.pattern) return false;
+  if (!rule.enabled) return false;
+
+  // 无条件兜底规则：只要启用即命中
+  if (rule.operator === RuleOperator.Always) return true;
+
+  // 时间规则：pattern 为天数，超过该天数未修改即命中
+  if (rule.field === RuleField.ModifiedTime) {
+    if (rule.operator !== RuleOperator.OlderThanDays) return false;
+    if (mtime === undefined || mtime <= 0) return false;
+    const days = Number(rule.pattern);
+    if (!Number.isFinite(days) || days <= 0) return false;
+    return Date.now() - mtime > days * DAY_MS;
+  }
+
+  if (!rule.pattern) return false;
 
   let haystack: string;
   switch (rule.field) {

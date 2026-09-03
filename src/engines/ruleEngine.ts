@@ -26,11 +26,12 @@ export class RuleEngine implements IOrganizeEngine {
   async analyze(
     title: string,
     content: string,
-    filePath: string
+    filePath: string,
+    mtime?: number
   ): Promise<Suggestion> {
     // 按数组顺序（优先级）匹配，命中第一条即返回
     for (const rule of this.rules) {
-      if (matchRule(rule, title, content, filePath)) {
+      if (matchRule(rule, title, content, filePath, mtime)) {
         return {
           suggestedPath: normalizeFolderPath(rule.targetFolder),
           confidence: Math.min(1, rule.weight ?? 1),
@@ -48,43 +49,40 @@ export class RuleEngine implements IOrganizeEngine {
   }
 }
 
-/** 内置默认规则模板，用户可一键导入 */
+/**
+ * 种子规则集（Seed Rule-set）：全新安装时的默认规则
+ * 体现"行为即规则"产品理念——文件名是日期进日志、超过 30 天未修改进归档、
+ * 其余情况兜底进收件箱；语义分类交给 custom_rules.json（V0.2）。
+ * 用户可一键重新导入。
+ */
 export function defaultRules(): OrganizeRule[] {
   return [
     {
-      id: "default-invest",
-      name: "投资笔记",
-      field: RuleField.Content,
-      operator: RuleOperator.Contains,
-      pattern: "投资",
-      targetFolder: "投资笔记",
-      enabled: true,
-    },
-    {
-      id: "default-meeting",
-      name: "会议记录",
-      field: RuleField.Title,
-      operator: RuleOperator.Contains,
-      pattern: "会议",
-      targetFolder: "会议记录",
-      enabled: true,
-    },
-    {
-      id: "default-daily",
-      name: "日记",
+      id: "seed-journal",
+      name: "日志归位",
       field: RuleField.Filename,
       operator: RuleOperator.Regex,
-      pattern: "^\\d{4}-\\d{2}-\\d{2}$",
-      targetFolder: "日记",
+      // 文件名以日期开头（2026-09-01、2026-09-01 会议记录等）
+      pattern: "^\\d{4}-\\d{2}-\\d{2}",
+      targetFolder: "日志",
       enabled: true,
     },
     {
-      id: "default-todo",
-      name: "待办清单",
-      field: RuleField.Tag,
-      operator: RuleOperator.Equals,
-      pattern: "todo",
-      targetFolder: "待办",
+      id: "seed-archive",
+      name: "归档陈旧笔记",
+      field: RuleField.ModifiedTime,
+      operator: RuleOperator.OlderThanDays,
+      pattern: "30",
+      targetFolder: "归档",
+      enabled: true,
+    },
+    {
+      id: "seed-inbox-fallback",
+      name: "收件箱兜底",
+      field: RuleField.Filename,
+      operator: RuleOperator.Always,
+      pattern: "",
+      targetFolder: "收件箱",
       enabled: true,
     },
   ];

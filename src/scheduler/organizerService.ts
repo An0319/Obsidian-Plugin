@@ -82,7 +82,8 @@ export class OrganizerService {
       file.basename,
       content,
       file.path,
-      this.settings.engineLevel
+      this.settings.engineLevel,
+      file.stat.mtime
     );
   }
 

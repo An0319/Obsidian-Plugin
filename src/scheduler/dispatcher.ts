@@ -38,14 +38,15 @@ export class EngineDispatcher {
     title: string,
     content: string,
     filePath: string,
-    level: EngineLevel
+    level: EngineLevel,
+    mtime?: number
   ): Promise<{ suggestion: Suggestion | null; degradedFrom?: EngineLevel; error?: string }> {
     let lastError = "";
     for (const lvl of this.fallbackChain(level)) {
       const engine = this.engines.get(lvl);
       if (!engine) continue;
       try {
-        const suggestion = await engine.analyze(title, content, filePath);
+        const suggestion = await engine.analyze(title, content, filePath, mtime);
         return {
           suggestion,
           degradedFrom:

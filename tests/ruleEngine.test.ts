@@ -116,7 +116,7 @@ describe("RuleEngine", () => {
   });
 
   it("无命中返回空建议", async () => {
-    const engine = new RuleEngine(defaultRules());
+    const engine = new RuleEngine([]);
     const result = await engine.analyze("美食", "今天吃火锅", "a.md");
     expect(result.suggestedPath).toBe("");
     expect(result.confidence).toBe(0);
@@ -128,5 +128,121 @@ describe("RuleEngine", () => {
     ]);
     const result = await engine.analyze("t", "学了 react hooks", "a.md");
     expect(result.suggestedPath).toBe("前端");
+  });
+
+  it("修改时间超过 N 天命中", async () => {
+    const engine = new RuleEngine([
+      rule({
+        id: "old",
+        field: RuleField.ModifiedTime,
+        operator: RuleOperator.OlderThanDays,
+        pattern: "30",
+        targetFolder: "归档",
+      }),
+    ]);
+    const stale = Date.now() - 31 * 24 * 60 * 60 * 1000;
+    const hit = await engine.analyze("t", "内容", "a.md", stale);
+    expect(hit.suggestedPath).toBe("归档");
+
+    const fresh = Date.now() - 5 * 24 * 60 * 60 * 1000;
+    const miss = await engine.analyze("t", "内容", "a.md", fresh);
+    expect(miss.suggestedPath).toBe("");
+  });
+
+  it("修改时间规则缺少 mtime 或天数非法时不命中", async () => {
+    const engine = new RuleEngine([
+      rule({
+        id: "old",
+        field: RuleField.ModifiedTime,
+        operator: RuleOperator.OlderThanDays,
+        pattern: "30",
+        targetFolder: "归档",
+      }),
+    ]);
+    expect((await engine.analyze("t", "内容", "a.md")).suggestedPath).toBe("");
+    expect(
+      (await engine.analyze("t", "内容", "a.md", Date.now())).suggestedPath
+    ).toBe("");
+
+    const bad = new RuleEngine([
+      rule({
+        id: "old",
+        field: RuleField.ModifiedTime,
+        operator: RuleOperator.OlderThanDays,
+        pattern: "abc",
+        targetFolder: "归档",
+      }),
+    ]);
+    expect(
+      (await bad.analyze("t", "内容", "a.md", 0)).suggestedPath
+    ).toBe("");
+  });
+
+  it("Always 兜底规则无条件命中", async () => {
+    const engine = new RuleEngine([
+      rule({ id: "no-hit", pattern: "投资", targetFolder: "投资" }),
+      rule({
+        id: "fallback",
+        operator: RuleOperator.Always,
+        pattern: "",
+        targetFolder: "收件箱",
+      }),
+    ]);
+    const miss = await engine.analyze("t", "无关内容", "a.md");
+    expect(miss.suggestedPath).toBe("收件箱");
+
+    const disabled = new RuleEngine([
+      rule({
+        id: "fallback",
+        operator: RuleOperator.Always,
+        pattern: "",
+        targetFolder: "收件箱",
+        enabled: false,
+      }),
+    ]);
+    expect((await disabled.analyze("t", "内容", "a.md")).suggestedPath).toBe("");
+  });
+
+  describe("种子规则集", () => {
+    it("日期开头的文件名进日志", async () => {
+      const engine = new RuleEngine(defaultRules());
+      const result = await engine.analyze(
+        "2026-09-01",
+        "内容",
+        "Inbox/2026-09-01.md",
+        Date.now()
+      );
+      expect(result.suggestedPath).toBe("日志");
+    });
+
+    it("超过 30 天未修改进归档", async () => {
+      const engine = new RuleEngine(defaultRules());
+      const stale = Date.now() - 40 * 24 * 60 * 60 * 1000;
+      const result = await engine.analyze("随笔", "内容", "Inbox/随笔.md", stale);
+      expect(result.suggestedPath).toBe("归档");
+    });
+
+    it("新笔记命中收件箱兜底", async () => {
+      const engine = new RuleEngine(defaultRules());
+      const result = await engine.analyze(
+        "随手记",
+        "内容",
+        "Inbox/随手记.md",
+        Date.now()
+      );
+      expect(result.suggestedPath).toBe("收件箱");
+    });
+
+    it("规则按顺序生效：日志优先于归档与兜底", async () => {
+      const engine = new RuleEngine(defaultRules());
+      const stale = Date.now() - 60 * 24 * 60 * 60 * 1000;
+      const result = await engine.analyze(
+        "2026-01-01",
+        "内容",
+        "Inbox/2026-01-01.md",
+        stale
+      );
+      expect(result.suggestedPath).toBe("日志");
+    });
   });
 });
