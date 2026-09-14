@@ -46,4 +46,6 @@ Entries discovered by the Agent during task execution should follow this format:
   - 构建命令：npm run build（tsc 类型检查 + esbuild 压缩产出 main.js）
   - 测试命令：npm test（Vitest，6 个文件 56 个用例）
   - npm install/build/test 必须使用 background_terminal_create 执行（环境内存约 7965MB）
-  - main.js 为构建产物，已被 .gitignore 排除，通过 GitHub Release 分发
+  - main.js 为构建产物，当前被 git 跟踪且随 main 分支提交（.gitignore 无排除条目）；正式 Release 资产由 GitHub Actions 分发，V0.3 上架前建议取消跟踪并补 .gitignore（需用户确认，涉及 git rm --cached）
+  - 本仓库托管在 GitHub（An0319/Obsidian-Plugin），push options 的 merge_request.create 为 GitLab 语法，GitHub 上无效；PR 需 gh CLI（未认证）或用户手动创建
+  - 推送后必须用 git ls-remote 比对本地与远程 hash 确认推送成功（曾遇 HTTP 500 瞬时失败，重试即可）
