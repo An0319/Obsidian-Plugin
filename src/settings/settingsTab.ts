@@ -1,9 +1,11 @@
 import {
+  AbstractInputSuggest,
   App,
   Modal,
   Notice,
   PluginSettingTab,
   Setting,
+  TFolder,
   requestUrl,
 } from "obsidian";
 import { SmartNotesSettings, DEFAULT_SETTINGS } from "./settings";
@@ -11,6 +13,7 @@ import { EngineLevel, OrganizeRule, RuleField, RuleOperator } from "../types";
 import { SharedModelEngine } from "../engines/sharedModelEngine";
 import { OllamaEngine, HttpClient } from "../engines/ollamaEngine";
 import { ActivityLog } from "../services/fileOrganizer";
+import { collectFolderPaths } from "../services/seedFolderMapper";
 import SmartNotesPlugin from "../main";
 
 /** Obsidian requestUrl 适配器（跨平台无 CORS 限制），带整体超时保护 */
@@ -97,11 +100,42 @@ export function sampleSharedConfig(): string {
 }
 
 /** 单条规则编辑弹窗 */
+/** 目标文件夹输入建议：候选为库内已有文件夹，选中后回写规则 */
+class FolderInputSuggest extends AbstractInputSuggest<TFolder> {
+  constructor(
+    app: App,
+    inputEl: HTMLInputElement,
+    private onPick: (path: string) => void,
+    private excludedFolders: string[]
+  ) {
+    super(app, inputEl);
+  }
+
+  protected getSuggestions(query: string): TFolder[] {
+    const lower = query.trim().toLowerCase();
+    return collectFolderPaths(this.app, this.excludedFolders)
+      .map((path) => this.app.vault.getAbstractFileByPath(path))
+      .filter((f): f is TFolder => f instanceof TFolder)
+      .filter((f) => lower === "" || f.path.toLowerCase().includes(lower))
+      .slice(0, 30);
+  }
+
+  renderSuggestion(folder: TFolder, el: HTMLElement): void {
+    el.setText(folder.path);
+  }
+
+  selectSuggestion(folder: TFolder): void {
+    this.onPick(folder.path);
+    this.close();
+  }
+}
+
 class RuleEditModal extends Modal {
   constructor(
     app: App,
     private rule: OrganizeRule,
     private isNew: boolean,
+    private excludedFolders: string[],
     private onSave: (rule: OrganizeRule) => void
   ) {
     super(app);
@@ -170,9 +204,16 @@ class RuleEditModal extends Modal {
           .onChange((v) => (rule.pattern = v))
       );
 
-    new Setting(contentEl).setName("目标文件夹").addText((t) =>
-      t.setPlaceholder("如：02-战略/竞品").setValue(rule.targetFolder).onChange((v) => (rule.targetFolder = v))
-    );
+    new Setting(contentEl).setName("目标文件夹")
+      .setDesc("从库内已有文件夹选择，或直接输入新路径（首次移动时自动创建）")
+      .addText((t) => {
+        t.setPlaceholder("如：02-战略/竞品").setValue(rule.targetFolder).onChange((v) => (rule.targetFolder = v));
+        new FolderInputSuggest(this.app, t.inputEl, (path) => {
+          rule.targetFolder = path;
+          t.setValue(path);
+        }, this.excludedFolders);
+        return t;
+      });
 
     new Setting(contentEl)
       .addButton((b) =>
@@ -231,6 +272,22 @@ export class SmartNotesSettingTab extends PluginSettingTab {
     containerEl.addClass("smart-notes-settings");
     const settings = this.plugin.settings;
 
+    // ===== 快速入门 =====
+    containerEl.createEl("h2", { text: "快速入门" });
+    const quickStart = containerEl.createDiv({ cls: "smart-notes-quickstart" });
+    quickStart.createEl("p", {
+      text: "工作原理：把笔记投入 Inbox → 点击左侧 Ribbon 图标（或自动监听）→ 插件判断归属并移动，内部链接自动更新。全程本地运行，不匹配的笔记保留原位。",
+    });
+    quickStart.createEl("p", {
+      text: "首次配置三步：① 下方确认 Inbox 文件夹名与你的习惯一致；② 导入种子规则集（自动复用你已有的日志/归档/收件箱文件夹）；③ 用一篇笔记点 Ribbon 试运行。",
+    });
+    if (!settings.rules.some((r) => r.id.startsWith("seed-"))) {
+      quickStart.createEl("p", {
+        cls: "smart-notes-quickstart-hint",
+        text: "尚未导入种子规则集——在「层级一：规则映射」分区点击「导入种子规则」即可开始。",
+      });
+    }
+
     // ===== 引擎选择 =====
     containerEl.createEl("h2", { text: "整理引擎" });
     new Setting(containerEl)
@@ -253,24 +310,52 @@ export class SmartNotesSettingTab extends PluginSettingTab {
 
     // ===== 层级一：规则列表 =====
     containerEl.createEl("h3", { text: "层级一：规则映射" });
+    containerEl.createEl("p", {
+      cls: "setting-item-description",
+      text: "规则按顺序逐条匹配，命中即移动；条件支持文件名 / 标题 / 内容 / 标签 / 修改时间。目标文件夹输入框支持从库内已有文件夹中选择。",
+    });
     this.renderRules();
     new Setting(containerEl)
       .setName("种子规则集")
-      .setDesc("一键导入默认规则（日志归位 / 归档陈旧笔记 / 收件箱兜底），已有同名规则会跳过")
+      .setDesc("一键导入默认规则（日志归位 / 归档陈旧笔记 / 收件箱兜底）；已有同名规则会跳过，目标文件夹自动复用你库内已有的同名或等价文件夹")
       .addButton((b) =>
         b.setButtonText("导入种子规则").onClick(async () => {
           const { defaultRules } = await import("../engines/ruleEngine");
+          const { collectFolderPaths, mapSeedFolders } = await import("../services/seedFolderMapper");
           const existing = new Set(settings.rules.map((r) => r.id));
           const incoming = defaultRules().filter((r) => !existing.has(r.id));
+          if (incoming.length === 0) {
+            new Notice("种子规则已存在，无需重复导入");
+            return;
+          }
+          const mappings = mapSeedFolders(
+            collectFolderPaths(this.app, settings.excludedFolders),
+            incoming.map((r) => ({ ruleId: r.id, defaultFolder: r.targetFolder })),
+            settings.excludedFolders
+          );
+          const byId = new Map(mappings.map((m) => [m.ruleId, m]));
+          for (const rule of incoming) {
+            rule.targetFolder = byId.get(rule.id)?.mappedFolder ?? rule.targetFolder;
+          }
           settings.rules.push(...incoming);
           await this.plugin.saveSettings();
           this.display();
-          new Notice(`已导入 ${incoming.length} 条种子规则`);
+          const lines = incoming.map((r) => {
+            const m = byId.get(r.id);
+            return m?.reused
+              ? `${r.name} → ${m.mappedFolder}（复用已有文件夹）`
+              : `${r.name} → ${m?.mappedFolder}（首次移动时创建）`;
+          });
+          new Notice(`已导入 ${incoming.length} 条种子规则：\n${lines.join("\n")}`, 8000);
         })
       );
 
     // ===== 层级二 =====
     containerEl.createEl("h3", { text: "层级二：TF-IDF 智能匹配" });
+    containerEl.createEl("p", {
+      cls: "setting-item-description",
+      text: "从你已有文件夹的内容中学习特征向量：某文件夹笔记越多，相似的新笔记越容易被归入其中。无需配置即可跟随你的目录结构。",
+    });
     new Setting(containerEl)
       .setName("相似度阈值")
       .setDesc(`当前 ${(settings.tfidfThreshold * 100).toFixed(0)}%，低于该值时建议保留原位`)
@@ -432,6 +517,10 @@ export class SmartNotesSettingTab extends PluginSettingTab {
 
     // ===== 通用设置 =====
     containerEl.createEl("h2", { text: "通用设置" });
+    containerEl.createEl("p", {
+      cls: "setting-item-description",
+      text: "Inbox 文件夹名、排除范围与日志开关。排除的文件夹插件永不触碰，附件与模板目录默认已在白名单内。",
+    });
     new Setting(containerEl)
       .setName("启用自动整理")
       .setDesc("监听新建笔记并自动给出整理建议")
@@ -492,7 +581,21 @@ export class SmartNotesSettingTab extends PluginSettingTab {
 
     // ===== 日志 =====
     containerEl.createEl("h2", { text: "最近整理记录" });
+    containerEl.createEl("p", {
+      cls: "setting-item-description",
+      text: "仅保留最近 200 条移动记录（organize-log.json，存于插件目录），超出自动丢弃最旧的。数据完全本地保存，可随时清空。",
+    });
     const log = new ActivityLog(this.app, this.plugin.manifest.dir ?? "");
+    new Setting(containerEl)
+      .setName("清空整理记录")
+      .setDesc("删除全部历史记录，此操作不可恢复")
+      .addButton((b) =>
+        b.setButtonText("清空").setWarning().onClick(async () => {
+          await log.clear();
+          this.display();
+          new Notice("整理记录已清空");
+        })
+      );
     void log.read().then((entries) => {
       if (entries.length === 0) {
         containerEl.createEl("p", { text: "暂无记录" });
@@ -546,7 +649,7 @@ export class SmartNotesSettingTab extends PluginSettingTab {
       );
       setting.addButton((b) =>
         b.setIcon("pencil").setTooltip("编辑").onClick(() => {
-          new RuleEditModal(this.app, rule, false, async (updated) => {
+          new RuleEditModal(this.app, rule, false, settings.excludedFolders, async (updated) => {
             settings.rules[index] = updated;
             await this.plugin.saveSettings();
             this.display();
@@ -575,7 +678,7 @@ export class SmartNotesSettingTab extends PluginSettingTab {
             targetFolder: "",
             enabled: true,
           };
-          new RuleEditModal(this.app, blank, true, async (created) => {
+          new RuleEditModal(this.app, blank, true, settings.excludedFolders, async (created) => {
             settings.rules.push(created);
             await this.plugin.saveSettings();
             this.display();

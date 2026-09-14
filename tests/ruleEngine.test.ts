@@ -215,6 +215,30 @@ describe("RuleEngine", () => {
       expect(result.suggestedPath).toBe("日志");
     });
 
+    it.each([
+      ["2026_09_01 会议记录"],
+      ["2026年9月1日 晨记"],
+      ["2026年09月01日"],
+      ["2026-09 月度总结"],
+      ["2026.9.1"],
+      ["20260901"],
+      ["20260901 站会"],
+    ])("紧凑/中文/下划线日期格式命中日志：%s", async (filename) => {
+      const engine = new RuleEngine(defaultRules());
+      const result = await engine.analyze(filename, "内容", `Inbox/${filename}.md`, Date.now());
+      expect(result.suggestedPath).toBe("日志");
+    });
+
+    it.each([
+      ["13812345678"],
+      ["13812345678 客户联系"],
+      ["99999999"],
+    ])("长数字串（非日期）误命中防护：%s", async (filename) => {
+      const engine = new RuleEngine(defaultRules());
+      const result = await engine.analyze(filename, "内容", `Inbox/${filename}.md`, Date.now());
+      expect(result.suggestedPath).toBe("收件箱");
+    });
+
     it("超过 30 天未修改进归档", async () => {
       const engine = new RuleEngine(defaultRules());
       const stale = Date.now() - 40 * 24 * 60 * 60 * 1000;

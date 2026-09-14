@@ -49,6 +49,15 @@ export class ActivityLog {
       return [];
     }
   }
+
+  /** 清空全部整理记录（写入空数组，保留文件本身） */
+  async clear(): Promise<void> {
+    try {
+      await this.app.vault.adapter.write(this.logPath, "[]");
+    } catch {
+      // 清空失败不影响主流程
+    }
+  }
 }
 
 /**
