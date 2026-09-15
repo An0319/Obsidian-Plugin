@@ -5,6 +5,7 @@ import {
   Notice,
   PluginSettingTab,
   Setting,
+  TFile,
   TFolder,
   requestUrl,
 } from "obsidian";
@@ -14,6 +15,7 @@ import { SharedModelEngine } from "../engines/sharedModelEngine";
 import { OllamaEngine, HttpClient } from "../engines/ollamaEngine";
 import { ActivityLog } from "../services/fileOrganizer";
 import { collectFolderPaths } from "../services/seedFolderMapper";
+import { CUSTOM_RULES_PATH, parseCustomRules } from "../services/customRulesLoader";
 import SmartNotesPlugin from "../main";
 
 /** Obsidian requestUrl 适配器（跨平台无 CORS 限制），带整体超时保护 */
@@ -216,6 +218,20 @@ class RuleEditModal extends Modal {
       });
 
     new Setting(contentEl)
+      .setName("权重（可选）")
+      .setDesc("0~1，影响命中时的置信度；留空或 1 表示默认置信度")
+      .addText((t) => {
+        t.setPlaceholder("如：0.9")
+          .setValue(rule.weight !== undefined ? String(rule.weight) : "")
+          .onChange((v) => {
+            const n = Number(v);
+            if (v.trim() === "") delete rule.weight;
+            else if (Number.isFinite(n) && n >= 0 && n <= 1) rule.weight = n;
+          });
+        return t;
+      });
+
+    new Setting(contentEl)
       .addButton((b) =>
         b
           .setButtonText("保存")
@@ -347,6 +363,42 @@ export class SmartNotesSettingTab extends PluginSettingTab {
               : `${r.name} → ${m?.mappedFolder}（首次移动时创建）`;
           });
           new Notice(`已导入 ${incoming.length} 条种子规则：\n${lines.join("\n")}`, 8000);
+        })
+      );
+
+    new Setting(containerEl)
+      .setName("custom_rules.json")
+      .setDesc("在库根目录放置 custom_rules.json（格式：{ formatVersion: 1, rules: [...] }，规则字段与规则编辑器一致，可带 weight 0~1 调节置信度），点击导入。与种子规则按 id 去重。")
+      .addButton((b) =>
+        b.setButtonText("从库根导入").onClick(async () => {
+          const file = this.app.vault.getAbstractFileByPath(CUSTOM_RULES_PATH);
+          if (!(file instanceof TFile)) {
+            new Notice(`未找到 ${CUSTOM_RULES_PATH}——请在库根目录创建后重试`, 8000);
+            return;
+          }
+          let json: string;
+          try {
+            json = await this.app.vault.cachedRead(file);
+          } catch (err) {
+            new Notice(`读取失败：${err instanceof Error ? err.message : String(err)}`);
+            return;
+          }
+          try {
+            const { rules, description } = parseCustomRules(json);
+            const existing = new Set(settings.rules.map((r) => r.id));
+            const fresh = rules.filter((r) => !existing.has(r.id));
+            settings.rules.push(...fresh);
+            await this.plugin.saveSettings();
+            this.display();
+            new Notice(
+              fresh.length === rules.length
+                ? `已从 ${description} 导入 ${fresh.length} 条规则`
+                : `导入 ${fresh.length} 条，跳过 ${rules.length - fresh.length} 条已存在（id 重复）`,
+              8000
+            );
+          } catch (err) {
+            new Notice(err instanceof Error ? err.message : String(err), 8000);
+          }
         })
       );
 

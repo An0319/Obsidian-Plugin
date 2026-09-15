@@ -1,5 +1,10 @@
 import { describe, it, expect } from "vitest";
-import { tokenize, termFrequency, stripMarkdownNoise } from "../src/engines/tfidf/tokenizer";
+import {
+  tokenize,
+  termFrequency,
+  stripMarkdownNoise,
+  stemEnglish,
+} from "../src/engines/tfidf/tokenizer";
 
 describe("tokenize", () => {
   it("英文按单词切分并小写化", () => {
@@ -42,6 +47,53 @@ describe("tokenize", () => {
   it("wiki 链接保留目标名", () => {
     const tokens = tokenize("[[投资笔记/竞品分析]]");
     expect(tokens.some((t) => t.includes("竞品"))).toBe(true);
+  });
+
+  it("英文停用词被过滤", () => {
+    const tokens = tokenize("The quick brown fox jumps over the lazy dog");
+    expect(tokens).not.toContain("the");
+    expect(tokens).not.toContain("over");
+    expect(tokens).toContain("quick");
+    expect(tokens).toContain("lazy");
+  });
+
+  it("英文单复数归一（notes 与 note 同 token）", () => {
+    expect(tokenize("notes")).toEqual(tokenize("note"));
+    expect(tokenize("My Project Notes")).toContain("project");
+  });
+
+  it("英文时态归一（running/ran 场景中 ing 双辅音还原）", () => {
+    expect(tokenize("running")).toEqual(tokenize("run"));
+    expect(tokenize("stopped")).toEqual(tokenize("stop"));
+    expect(tokenize("needed")).toEqual(tokenize("need"));
+  });
+
+  it("英文派生词去 ly 后缀", () => {
+    expect(stemEnglish("quickly")).toBe("quick");
+  });
+
+  it("ies 与 sses 复数规则", () => {
+    expect(stemEnglish("studies")).toBe("study");
+    expect(stemEnglish("classes")).toBe("class");
+  });
+
+  it("短词与受保护后缀不做词干化", () => {
+    expect(stemEnglish("is")).toBe("is");
+    expect(stemEnglish("campus")).toBe("campus");
+    expect(stemEnglish("crisis")).toBe("crisis");
+    expect(stemEnglish("class")).toBe("class");
+    expect(stemEnglish("2026")).toBe("2026");
+  });
+
+  it("news 类非常规复数按通用规则处理（轻量词干化已知取舍）", () => {
+    expect(stemEnglish("news")).toBe("new");
+  });
+
+  it("混合文本中中文不受英文规则影响", () => {
+    const tokens = tokenize("the 研究笔记 studies");
+    expect(tokens).toContain("研究");
+    expect(tokens).toContain("study");
+    expect(tokens).not.toContain("the");
   });
 });
 
