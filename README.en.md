@@ -35,6 +35,25 @@ Drop files into your Inbox, hit run, and the plugin moves each note to the folde
 
 Clear boundaries are professionalism: smaller modules are more reliable; focused capabilities are more trustworthy.
 
+## Use Cases & Value
+
+Where this plugin delivers the highest value density:
+
+**1. Batch-clearing the backlog (strongest scenario).** 200 unfiled notes would take two hours to sort by hand. Run the plugin once and 80% land correctly; you spend 20 minutes fixing the rest. The "aha moment" arrives on first use. The notes you correct afterwards become learning material for the target folders — the plugin understands your vault better every time you use it.
+
+**2. Daily micro-filing, complementary to AI deep cleans.** Run a weekly "organize unfiled notes" session with Claude Code or Cursor; the dozen notes that pile up in between are handled daily by this plugin — fully local, near-zero cost, unlimited frequency. AI does the weekly deep clean; the plugin does the daily tidy-up. AI is good at getting the first 80% right; the plugin remembers every correction you make.
+
+**3. Silent automation.** A quick note captured on your phone is already in the right folder when you return to your desk. The best automation is the kind you never notice working — everything runs locally, nothing ever leaves your machine.
+
+**Core philosophy: Behavior as Rule.** There is no need to design an elaborate rule system — your drags, your folders, and your notes themselves are the rules. All of the plugin's intelligence comes from learning how you already organize your vault, which makes it a companion to AI workflows rather than their replacement.
+
+## License & Statement
+
+- **Free forever**: this plugin is free for everyone; the author commits to keeping it a non-commercial product.
+- **No commercial use**: the project is distributed under a noncommercial license (see [LICENSE](./LICENSE)). Any direct or indirect commercial use requires the author's prior written permission; reach out via GitHub Issues for commercial licensing.
+- **Maintenance**: developed and maintained long-term by the author together with AI (vibe coding). Source is publicly available on GitHub; releases are reviewed by the author.
+- **Privacy boundary**: every organizing decision is made locally; note content never leaves your machine.
+
 ## Four-Level Engine
 
 | Level | Name | Audience | How it works |
