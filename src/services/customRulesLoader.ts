@@ -1,3 +1,4 @@
+import type { App } from "obsidian";
 import { OrganizeRule, RuleField, RuleOperator } from "../types";
 import { normalizeFolderPath } from "../utils/helpers";
 
@@ -93,4 +94,47 @@ export function parseCustomRules(json: string): { rules: OrganizeRule[]; descrip
     description:
       (typeof o.description === "string" ? o.description : "") || `custom_rules.json${note}`,
   };
+}
+
+/**
+ * 生成样例文件内容：通俗说明 + 2 条示例规则（包含匹配 / 修改时间匹配各一条）。
+ * 不变量：输出必须能被 parseCustomRules 完整解析且字段无损（round-trip，测试覆盖）。
+ */
+export function buildSampleRulesJson(): string {
+  const sample = {
+    formatVersion: 1,
+    description:
+      "整理规则示例文件，可直接修改后使用。每条规则包含五项：规则名称（随意起）、匹配字段（检查笔记的哪个部分）、匹配方式（如何判断）、匹配内容（要找的文字或天数）、目标文件夹（整理到哪里）。",
+    rules: [
+      {
+        id: "sample-meeting",
+        name: "会议纪要",
+        field: "filename",
+        operator: "contains",
+        pattern: "会议",
+        targetFolder: "会议记录",
+        enabled: true,
+        weight: 0.8,
+      },
+      {
+        id: "sample-old",
+        name: "陈旧笔记归档",
+        field: "mtime",
+        operator: "older_than_days",
+        pattern: "30",
+        targetFolder: "归档",
+        enabled: true,
+        weight: 0.7,
+      },
+    ],
+  };
+  return JSON.stringify(sample, null, 2);
+}
+
+/**
+ * 在库根写入样例文件（已存在时由调用方先确认覆盖）。
+ * 写入失败时向上抛错，由调用方以 Notice 展示。
+ */
+export async function writeSampleRulesFile(app: App): Promise<void> {
+  await app.vault.adapter.write(CUSTOM_RULES_PATH, buildSampleRulesJson());
 }

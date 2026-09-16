@@ -15,7 +15,14 @@ import { SharedModelEngine } from "../engines/sharedModelEngine";
 import { OllamaEngine, HttpClient } from "../engines/ollamaEngine";
 import { ActivityLog } from "../services/fileOrganizer";
 import { collectFolderPaths } from "../services/seedFolderMapper";
-import { CUSTOM_RULES_PATH, parseCustomRules } from "../services/customRulesLoader";
+import { collectUserFolders } from "../services/vaultFolders";
+import { MAX_DISPLAY_FOLDERS, UserFolder } from "../services/userFolders";
+import {
+  CUSTOM_RULES_PATH,
+  parseCustomRules,
+  buildSampleRulesJson,
+  writeSampleRulesFile,
+} from "../services/customRulesLoader";
 import SmartNotesPlugin from "../main";
 
 /** Obsidian requestUrl 适配器（跨平台无 CORS 限制），带整体超时保护 */
@@ -102,6 +109,38 @@ export function sampleSharedConfig(): string {
 }
 
 /** 单条规则编辑弹窗 */
+/** 覆盖确认弹窗：样例文件已存在时使用 */
+class SampleOverwriteModal extends Modal {
+  constructor(
+    app: App,
+    private message: string,
+    private onConfirm: () => void
+  ) {
+    super(app);
+  }
+
+  onOpen(): void {
+    this.contentEl.empty();
+    this.contentEl.createEl("h3", { text: "覆盖确认" });
+    this.contentEl.createEl("p", { text: this.message });
+    new Setting(this.contentEl)
+      .addButton((b) =>
+        b
+          .setButtonText("覆盖")
+          .setWarning()
+          .onClick(() => {
+            this.onConfirm();
+            this.close();
+          })
+      )
+      .addButton((b) => b.setButtonText("取消").onClick(() => this.close()));
+  }
+
+  onClose(): void {
+    this.contentEl.empty();
+  }
+}
+
 /** 目标文件夹输入建议：候选为库内已有文件夹，选中后回写规则 */
 class FolderInputSuggest extends AbstractInputSuggest<TFolder> {
   constructor(
@@ -191,7 +230,7 @@ class RuleEditModal extends Modal {
           ? "填写天数，如：30 表示超过 30 天未修改"
           : rule.operator === RuleOperator.Always
             ? "兜底规则无需填写"
-            : "如：投资 或 ^\\d{4}-\\d{2}-\\d{2}"
+            : "填写笔记中要找的文字，如：投资（进阶：也可填正则表达式）"
       )
       .addText((t) =>
         t
@@ -200,7 +239,7 @@ class RuleEditModal extends Modal {
               ? "30"
               : rule.operator === RuleOperator.Always
                 ? ""
-                : "如：投资 或 ^\\d{4}-\\d{2}-\\d{2}$"
+                : "如：投资"
           )
           .setValue(rule.pattern)
           .onChange((v) => (rule.pattern = v))
@@ -257,19 +296,29 @@ class RuleEditModal extends Modal {
   }
 }
 
+/** 匹配字段的中文名称（用于规则列表展示） */
+const FIELD_LABELS: Record<string, string> = {
+  [RuleField.Title]: "标题",
+  [RuleField.Content]: "笔记内容",
+  [RuleField.Tag]: "标签",
+  [RuleField.Filename]: "文件名 / 路径",
+  [RuleField.ModifiedTime]: "修改时间",
+};
+
 /** 生成规则的人类可读描述（用于规则列表展示） */
 function describeRule(rule: OrganizeRule): string {
+  const fieldLabel = FIELD_LABELS[rule.field] ?? rule.field;
   switch (rule.operator) {
     case RuleOperator.Regex:
       return `文件名 / 路径 匹配「${rule.pattern}」`;
     case RuleOperator.Equals:
-      return `${rule.field} 等于「${rule.pattern}」`;
+      return `${fieldLabel} 等于「${rule.pattern}」`;
     case RuleOperator.OlderThanDays:
       return `修改时间超过 ${rule.pattern} 天`;
     case RuleOperator.Always:
       return "无条件命中";
     default:
-      return `${rule.field} 包含「${rule.pattern}」`;
+      return `${fieldLabel} 包含「${rule.pattern}」`;
   }
 }
 
@@ -295,12 +344,12 @@ export class SmartNotesSettingTab extends PluginSettingTab {
       text: "工作原理：把笔记投入 Inbox → 点击左侧 Ribbon 图标（或自动监听）→ 插件判断归属并移动，内部链接自动更新。全程本地运行，不匹配的笔记保留原位。",
     });
     quickStart.createEl("p", {
-      text: "首次配置三步：① 下方确认 Inbox 文件夹名与你的习惯一致；② 导入种子规则集（自动复用你已有的日志/归档/收件箱文件夹）；③ 用一篇笔记点 Ribbon 试运行。",
+      text: "首次配置三步：① 下方确认 Inbox 文件夹名与你的习惯一致；② 建立整理规则——三个起点任选：从已有文件夹一键生成、导入内置规则集、或手工新建；③ 用一篇笔记点 Ribbon 试运行。",
     });
     if (!settings.rules.some((r) => r.id.startsWith("seed-"))) {
       quickStart.createEl("p", {
         cls: "smart-notes-quickstart-hint",
-        text: "尚未导入种子规则集——在「层级一：规则映射」分区点击「导入种子规则」即可开始。",
+        text: "尚未导入内置规则集——在「层级一：规则映射」分区点击「导入种子规则」即可开始。",
       });
     }
 
@@ -366,9 +415,43 @@ export class SmartNotesSettingTab extends PluginSettingTab {
         })
       );
 
+    // ===== 从已有文件夹开始 =====
+    containerEl.createEl("h3", { text: "从已有文件夹开始" });
+    containerEl.createEl("p", {
+      cls: "setting-item-description",
+      text: "库里已经分好类的文件夹可以直接利用：点「建规则」会打开规则编辑器，目标文件夹和匹配内容已帮你填好，改一下就能保存使用。",
+    });
+    this.renderExistingFolders();
+
     new Setting(containerEl)
       .setName("custom_rules.json")
-      .setDesc("在库根目录放置 custom_rules.json（格式：{ formatVersion: 1, rules: [...] }，规则字段与规则编辑器一致，可带 weight 0~1 调节置信度），点击导入。与种子规则按 id 去重。")
+      .setDesc("在库的最外层放一个名为 custom_rules.json 的规则文件，点「从库根导入」即可批量添加规则。没有该文件可先点「生成样例文件」获得一份可直接修改的示例。")
+      .addButton((b) =>
+        b.setButtonText("生成样例文件").onClick(async () => {
+          const doWrite = async () => {
+            try {
+              await writeSampleRulesFile(this.app);
+              this.display();
+              new Notice(
+                `已在库的最外层创建 ${CUSTOM_RULES_PATH} 示例文件：打开修改后，点「从库根导入」即可体验`,
+                10000
+              );
+            } catch (err) {
+              new Notice(`创建失败：${err instanceof Error ? err.message : String(err)}`, 8000);
+            }
+          };
+          const exists = this.app.vault.getAbstractFileByPath(CUSTOM_RULES_PATH) instanceof TFile;
+          if (exists) {
+            new SampleOverwriteModal(
+              this.app,
+              `库的最外层已有 ${CUSTOM_RULES_PATH}，生成样例会覆盖现有内容，确定继续吗？`,
+              doWrite
+            ).open();
+          } else {
+            await doWrite();
+          }
+        })
+      )
       .addButton((b) =>
         b.setButtonText("从库根导入").onClick(async () => {
           const file = this.app.vault.getAbstractFileByPath(CUSTOM_RULES_PATH);
@@ -660,6 +743,52 @@ export class SmartNotesSettingTab extends PluginSettingTab {
         });
       }
     });
+  }
+
+  /** 渲染「从已有文件夹开始」分区：用户文件夹列表 + 一键建规则草稿 */
+  private renderExistingFolders(): void {
+    const settings = this.plugin.settings;
+    const folders = collectUserFolders(this.app, settings.excludedFolders);
+
+    if (folders.length === 0) {
+      this.containerEl.createEl("p", {
+        cls: "setting-item-description",
+        text: "还没有可用的文件夹——先在库里建一个分类文件夹，或用上方内置规则开始。",
+      });
+      return;
+    }
+
+    const shown = folders.slice(0, MAX_DISPLAY_FOLDERS);
+    for (const folder of shown) {
+      new Setting(this.containerEl)
+        .setName(folder.name)
+        .setDesc(`路径 ${folder.path} · ${folder.noteCount} 篇笔记`)
+        .addButton((b) =>
+          b.setButtonText("建规则").onClick(() => {
+            const draft: OrganizeRule = {
+              id: `rule-${Date.now()}`,
+              name: `整理到 ${folder.name}`,
+              field: RuleField.Filename,
+              operator: RuleOperator.Contains,
+              pattern: folder.name,
+              targetFolder: folder.path,
+              enabled: true,
+            };
+            new RuleEditModal(this.app, draft, true, settings.excludedFolders, async (created) => {
+              settings.rules.push(created);
+              await this.plugin.saveSettings();
+              this.display();
+              new Notice(`规则「${created.name}」已添加`);
+            }).open();
+          })
+        );
+    }
+    if (folders.length > shown.length) {
+      this.containerEl.createEl("p", {
+        cls: "setting-item-description",
+        text: `共 ${folders.length} 个文件夹，仅展示前 ${shown.length} 个——其余可在规则编辑器的目标文件夹输入框中直接选择。`,
+      });
+    }
   }
 
   /** 渲染规则列表（按顺序即优先级，支持上下移动 / 启停 / 删除） */

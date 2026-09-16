@@ -3,6 +3,7 @@ import {
   CUSTOM_RULES_PATH,
   normalizeImportedRule,
   parseCustomRules,
+  buildSampleRulesJson,
 } from "../src/services/customRulesLoader";
 import { RuleField, RuleOperator } from "../src/types";
 
@@ -106,6 +107,40 @@ describe("customRulesLoader", () => {
       [JSON.stringify({ formatVersion: 1, rules: [{ name: "坏" }] }), "没有可用的规则"],
     ])("非法输入抛出可读错误：%#", (json, expected) => {
       expect(() => parseCustomRules(json)).toThrow(expected);
+    });
+  });
+
+  describe("buildSampleRulesJson（round-trip 不变量）", () => {
+    it("样例输出能被 parseCustomRules 完整解析且字段无损", () => {
+      const json = buildSampleRulesJson();
+      const { rules, description } = parseCustomRules(json);
+      expect(rules).toHaveLength(2);
+      expect(description).toContain("示例");
+
+      expect(rules[0]).toMatchObject({
+        id: "sample-meeting",
+        field: RuleField.Filename,
+        operator: RuleOperator.Contains,
+        pattern: "会议",
+        targetFolder: "会议记录",
+        weight: 0.8,
+        enabled: true,
+      });
+      expect(rules[1]).toMatchObject({
+        id: "sample-old",
+        field: RuleField.ModifiedTime,
+        operator: RuleOperator.OlderThanDays,
+        pattern: "30",
+        targetFolder: "归档",
+        weight: 0.7,
+        enabled: true,
+      });
+    });
+
+    it("样例 description 为通俗说明且样例 id 带前缀", () => {
+      const json = buildSampleRulesJson();
+      expect(json).toContain("规则名称");
+      expect(json).toContain("目标文件夹");
     });
   });
 });
