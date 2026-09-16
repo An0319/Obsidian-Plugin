@@ -23,6 +23,7 @@ import {
   buildSampleRulesJson,
   writeSampleRulesFile,
 } from "../services/customRulesLoader";
+import { describeRule } from "../services/ruleDescribe";
 import SmartNotesPlugin from "../main";
 
 /** Obsidian requestUrl 适配器（跨平台无 CORS 限制），带整体超时保护 */
@@ -213,11 +214,11 @@ class RuleEditModal extends Modal {
       .addDropdown((d) =>
         d
           .addOptions({
-            [RuleOperator.Contains]: "包含",
-            [RuleOperator.Equals]: "等于",
-            [RuleOperator.Regex]: "正则表达式",
+            [RuleOperator.Contains]: "含有某些文字（推荐）",
+            [RuleOperator.Equals]: "完全等于",
+            [RuleOperator.Regex]: "按固定规律匹配（正则，进阶）",
             [RuleOperator.OlderThanDays]: "超过 N 天未修改",
-            [RuleOperator.Always]: "无条件命中（兜底）",
+            [RuleOperator.Always]: "所有笔记都适用（兜底）",
           })
           .setValue(rule.operator)
           .onChange((v) => (rule.operator = v as RuleOperator))
@@ -230,7 +231,9 @@ class RuleEditModal extends Modal {
           ? "填写天数，如：30 表示超过 30 天未修改"
           : rule.operator === RuleOperator.Always
             ? "兜底规则无需填写"
-            : "填写笔记中要找的文字，如：投资（进阶：也可填正则表达式）"
+            : rule.operator === RuleOperator.Regex
+              ? "进阶写法：用符号描述文字规律，如 ^日记 表示以「日记」开头。日常需求选「含有某些文字」就够了"
+              : "填写笔记中要找的文字，如：投资"
       )
       .addText((t) =>
         t
@@ -239,7 +242,9 @@ class RuleEditModal extends Modal {
               ? "30"
               : rule.operator === RuleOperator.Always
                 ? ""
-                : "如：投资"
+                : rule.operator === RuleOperator.Regex
+                  ? "如：^日记"
+                  : "如：投资"
           )
           .setValue(rule.pattern)
           .onChange((v) => (rule.pattern = v))
@@ -293,32 +298,6 @@ class RuleEditModal extends Modal {
 
   onClose(): void {
     this.contentEl.empty();
-  }
-}
-
-/** 匹配字段的中文名称（用于规则列表展示） */
-const FIELD_LABELS: Record<string, string> = {
-  [RuleField.Title]: "标题",
-  [RuleField.Content]: "笔记内容",
-  [RuleField.Tag]: "标签",
-  [RuleField.Filename]: "文件名 / 路径",
-  [RuleField.ModifiedTime]: "修改时间",
-};
-
-/** 生成规则的人类可读描述（用于规则列表展示） */
-function describeRule(rule: OrganizeRule): string {
-  const fieldLabel = FIELD_LABELS[rule.field] ?? rule.field;
-  switch (rule.operator) {
-    case RuleOperator.Regex:
-      return `文件名 / 路径 匹配「${rule.pattern}」`;
-    case RuleOperator.Equals:
-      return `${fieldLabel} 等于「${rule.pattern}」`;
-    case RuleOperator.OlderThanDays:
-      return `修改时间超过 ${rule.pattern} 天`;
-    case RuleOperator.Always:
-      return "无条件命中";
-    default:
-      return `${fieldLabel} 包含「${rule.pattern}」`;
   }
 }
 
