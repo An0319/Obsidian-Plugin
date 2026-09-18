@@ -25,15 +25,15 @@ Drop files into your Inbox, hit run, and the plugin moves each note to the folde
 - Chinese + English content
 - Fully local, zero API cost, zero data upload
 
-**Explicitly excluded forever:**
+**Not in scope for now:**
 
 - Audio transcription, OCR, image recognition, PDF parsing
 - Chat, RAG, vector databases
 - Any form of cloud dependency
 
-> This plugin will never process audio, images, PDFs, or chats. Use other open-source tools (e.g., WhisperDesktop, Tesseract) to convert them to Markdown first, then let this plugin organize the results.
+> The current version focuses on plain-text Markdown and does not process audio, images, PDFs, or chats yet. Use other open-source tools (e.g., WhisperDesktop, Tesseract) to convert them to Markdown first, then let this plugin organize the results.
 
-Clear boundaries are professionalism: smaller modules are more reliable; focused capabilities are more trustworthy.
+Clear boundaries are professionalism: smaller modules are more reliable; focused capabilities are more trustworthy. Boundaries also grow with the project — if more contributors join and real needs expand, these lists can be revisited. The current priority stays reliable text organizing.
 
 ## Use Cases & Value
 
@@ -46,13 +46,6 @@ Where this plugin delivers the highest value density:
 **3. Silent automation.** A quick note captured on your phone is already in the right folder when you return to your desk. The best automation is the kind you never notice working — everything runs locally, nothing ever leaves your machine.
 
 **Core philosophy: Behavior as Rule.** There is no need to design an elaborate rule system — your drags, your folders, and your notes themselves are the rules. All of the plugin's intelligence comes from learning how you already organize your vault, which makes it a companion to AI workflows rather than their replacement.
-
-## License & Statement
-
-- **Free forever**: this plugin is free for everyone; the author commits to keeping it a non-commercial product.
-- **No commercial use**: the project is distributed under a noncommercial license (see [LICENSE](./LICENSE)). Any direct or indirect commercial use requires the author's prior written permission; reach out via GitHub Issues for commercial licensing.
-- **Maintenance**: developed and maintained long-term by the author together with AI (vibe coding). Source is publicly available on GitHub; releases are reviewed by the author.
-- **Privacy boundary**: every organizing decision is made locally; note content never leaves your machine.
 
 ## Four-Level Engine
 
@@ -213,6 +206,9 @@ Implement the `IOrganizeEngine` interface (`name` / `level` / `analyze`) and reg
 - Windows / macOS / Linux
 - Level 3 requires a local Ollama installation (`ollama pull qwen2.5:7b`, then `ollama serve`)
 
-## License
+## License & Statement
 
-MIT
+- **Free forever**: this plugin is free for everyone; the author commits to keeping it a non-commercial product.
+- **No commercial use**: the project is distributed under a noncommercial license (see [LICENSE](./LICENSE)). Any direct or indirect commercial use requires the author's prior written permission; reach out via GitHub Issues for commercial licensing.
+- **Maintenance**: developed and maintained long-term by the author together with AI (vibe coding). Source is publicly available on GitHub; releases are reviewed by the author.
+- **Privacy boundary**: every organizing decision is made locally; note content never leaves your machine.
