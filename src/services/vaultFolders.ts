@@ -1,5 +1,5 @@
 import { App, TFile, TFolder } from "obsidian";
-import { UserFolder, filterUserFolders } from "./userFolders";
+import { UserFolder, UserFolderNode, filterUserFolders, filterUserFolderTree } from "./userFolders";
 
 /** 递归统计文件夹内 Markdown 笔记数量（附件与子文件夹本身不计） */
 function countMarkdownNotes(folder: TFolder): number {
@@ -9,6 +9,16 @@ function countMarkdownNotes(folder: TFolder): number {
     else if (child instanceof TFolder) count += countMarkdownNotes(child);
   }
   return count;
+}
+
+/** 递归收集文件夹树（含任意深度子文件夹）及其笔记总数 */
+function collectTree(folder: TFolder, out: { path: string; noteCount: number }[]): void {
+  for (const child of folder.children) {
+    if (child instanceof TFolder && child.path.length > 0) {
+      out.push({ path: child.path, noteCount: countMarkdownNotes(child) });
+      collectTree(child, out);
+    }
+  }
 }
 
 /**
@@ -24,4 +34,18 @@ export function collectUserFolders(app: App, excludedFolders: string[]): UserFol
     }
   }
   return filterUserFolders(folders, excludedFolders);
+}
+
+/**
+ * 扫描库内全部文件夹（任意深度），返回树形展示数据。
+ * 排除规则与整理引擎一致；noteCount 含子文件夹笔记。
+ */
+export function collectUserFolderTree(
+  app: App,
+  excludedFolders: string[]
+): UserFolderNode[] {
+  const root = app.vault.getRoot();
+  const folders: { path: string; noteCount: number }[] = [];
+  collectTree(root, folders);
+  return filterUserFolderTree(folders, excludedFolders);
 }

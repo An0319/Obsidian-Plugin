@@ -1,5 +1,10 @@
 import { Plugin, TFile, Notice } from "obsidian";
-import { SmartNotesSettings, DEFAULT_SETTINGS } from "./settings/settings";
+import {
+  SmartNotesSettings,
+  DEFAULT_SETTINGS,
+  AutoOrganizeMode,
+  migrateSettings,
+} from "./settings/settings";
 import { SmartNotesSettingTab, obsidianHttp } from "./settings/settingsTab";
 import { EngineDispatcher } from "./scheduler/dispatcher";
 import { OrganizerService } from "./scheduler/organizerService";
@@ -8,7 +13,9 @@ import { TfidfEngine } from "./engines/tfidf/tfidfEngine";
 import { OllamaEngine } from "./engines/ollamaEngine";
 import { SharedModelEngine } from "./engines/sharedModelEngine";
 import { ActivityLog, FileOrganizer } from "./services/fileOrganizer";
-import { EngineLevel, OllamaPromptContext } from "./types";
+import { EngineLevel, OllamaPromptContext, OllamaSettings } from "./types";
+import { t, initLocale } from "./i18n";
+import { BatchReportModal } from "./ui/batchReportModal";
 
 const CREATE_DEBOUNCE_MS = 5000;
 const INTERNAL_MOVE_RESET_MS = 1500;
@@ -33,13 +40,19 @@ export default class SmartNotesPlugin extends Plugin {
   /** 新建笔记防抖计时器 */
   private pendingCreates = new Map<string, ReturnType<typeof setTimeout>>();
 
+  /** 标记一次插件内部移动（供撤销等 UI 操作复用，防整理回环） */
+  markInternalMove(): void {
+    this.internalMove = true;
+    setTimeout(() => (this.internalMove = false), INTERNAL_MOVE_RESET_MS);
+  }
+
   async onload(): Promise<void> {
     await this.loadSettings();
     this.initEngines();
     this.registerCommands();
     this.registerEvents();
 
-    this.addRibbonIcon("folder-input", "整理 Inbox", () =>
+    this.addRibbonIcon("folder-input", t("cmd.organizeInbox"), () =>
       this.organizeInboxCommand()
     );
 
@@ -53,10 +66,15 @@ export default class SmartNotesPlugin extends Plugin {
   }
 
   async loadSettings(): Promise<void> {
-    const data = (await this.loadData()) as Partial<SmartNotesSettings>;
-    this.settings = Object.assign({}, DEFAULT_SETTINGS, data, {
-      ollama: Object.assign({}, DEFAULT_SETTINGS.ollama, data?.ollama),
-    });
+    const data = await this.loadData();
+    const migrated = migrateSettings(data);
+    migrated.ollama = Object.assign(
+      {},
+      DEFAULT_SETTINGS.ollama,
+      (data as { ollama?: Partial<OllamaSettings> } | null)?.ollama
+    );
+    this.settings = migrated;
+    initLocale(migrated.locale);
   }
 
   async saveSettings(): Promise<void> {
@@ -129,7 +147,7 @@ export default class SmartNotesPlugin extends Plugin {
   private registerCommands(): void {
     this.addCommand({
       id: "organize-current-note",
-      name: "整理当前笔记",
+      name: t("cmd.organizeCurrent"),
       checkCallback: (checking) => {
         const file = this.app.workspace.getActiveFile();
         if (!file || file.extension !== "md") return false;
@@ -141,7 +159,7 @@ export default class SmartNotesPlugin extends Plugin {
 
     this.addCommand({
       id: "preview-current-suggestion",
-      name: "预览当前笔记的整理建议",
+      name: t("cmd.previewSuggestion"),
       checkCallback: (checking) => {
         const file = this.app.workspace.getActiveFile();
         if (!file || file.extension !== "md") return false;
@@ -153,17 +171,17 @@ export default class SmartNotesPlugin extends Plugin {
 
     this.addCommand({
       id: "organize-inbox",
-      name: "立即整理 Inbox",
+      name: t("cmd.organizeInbox"),
       callback: () => void this.organizeInboxCommand(),
     });
 
     this.addCommand({
       id: "rebuild-tfidf-cache",
-      name: "重建层级二特征缓存",
+      name: t("cmd.rebuildCache"),
       callback: async () => {
         this.tfidfEngine.invalidateCache();
         await this.tfidfEngine.initialize();
-        new Notice("文件夹特征缓存已重建");
+        new Notice(t("tfidf.rebuildDone"));
       },
     });
   }
@@ -172,7 +190,7 @@ export default class SmartNotesPlugin extends Plugin {
     this.registerEvent(
       this.app.vault.on("create", (file) => {
         if (!(file instanceof TFile) || file.extension !== "md") return;
-        if (!this.settings.autoOrganize) return;
+        if (this.settings.autoOrganizeMode === AutoOrganizeMode.Off) return;
         if (!this.inScope(file)) return;
         // 新建时文件往往还是空的，延迟等待用户写入内容
         const timer = setTimeout(() => {
@@ -188,7 +206,7 @@ export default class SmartNotesPlugin extends Plugin {
         void oldPath;
         if (!(file instanceof TFile) || file.extension !== "md") return;
         if (this.internalMove) return;
-        if (!this.settings.autoOrganize) return;
+        if (this.settings.autoOrganizeMode === AutoOrganizeMode.Off) return;
         if (!this.inScope(file)) return;
         void this.autoOrganize(file);
       })
@@ -205,13 +223,33 @@ export default class SmartNotesPlugin extends Plugin {
     return true;
   }
 
-  /** 自动整理：静默移动，完成后以 Notice 通知结果 */
+  /**
+   * 实时归档：Notify 模式仅提示建议（文件不动），Move 模式静默移动。
+   */
   private async autoOrganize(file: TFile): Promise<void> {
     try {
-      const result = await this.organizerService.organizeOne(file, "auto");
-      if (result.moved && result.suggestion) {
+      if (this.settings.autoOrganizeMode === AutoOrganizeMode.Notify) {
+        const { suggestion, error } = await this.organizerService.analyze(file);
+        if (error) return;
+        if (!suggestion) return;
+        if (!suggestion.suggestedPath) return;
         new Notice(
-          `已将「${file.basename}」移至 ${result.suggestion.suggestedPath}（${result.suggestion.reason}）`
+          t("notify.autoSuggest", {
+            name: file.basename,
+            to: suggestion.suggestedPath,
+            reason: suggestion.reason,
+          })
+        );
+        return;
+      }
+      const result = await this.organizerService.organizeOne(file, "auto");
+      if (result.moved && result.suggestion?.suggestedPath) {
+        new Notice(
+          t("notify.autoMoved", {
+            name: file.basename,
+            to: result.suggestion.suggestedPath,
+            reason: result.suggestion.reason,
+          })
         );
       }
     } catch (err) {
@@ -223,19 +261,17 @@ export default class SmartNotesPlugin extends Plugin {
   private async organizeCurrentNote(file: TFile): Promise<void> {
     const { suggestion } = await this.organizerService.analyze(file);
     if (!suggestion) {
-      new Notice("所有引擎均无法给出建议，请检查引擎配置");
+      new Notice(t("notify.noSuggestion"));
       return;
     }
     if (!suggestion.suggestedPath) {
-      new Notice(`暂无合适建议：${suggestion.reason}`);
+      new Notice(t("notify.keepInPlace", { reason: suggestion.reason }));
       return;
     }
 
-    this.internalMove = true;
-    setTimeout(() => (this.internalMove = false), INTERNAL_MOVE_RESET_MS);
-    const newPath = await this.organizerService.apply(file, suggestion, "manual");
-    if (newPath !== file.path) {
-      new Notice(`已移动「${file.basename}」到 ${newPath}`);
+    this.markInternalMove();
+    const newPath = await this.organizerService.apply(file, suggestion, "manual");    if (newPath !== file.path) {
+      new Notice(t("notify.movedTo", { name: file.basename, to: newPath }));
     }
   }
 
@@ -243,34 +279,45 @@ export default class SmartNotesPlugin extends Plugin {
   private async previewSuggestion(file: TFile): Promise<void> {
     const { suggestion, degradedFrom, error } = await this.organizerService.analyze(file);
     if (!suggestion) {
-      new Notice(`分析失败：${error ?? "未知错误"}`);
+      new Notice(t("notify.analyzeFail", { msg: error ?? "-" }));
       return;
     }
-    const target = suggestion.suggestedPath || "（建议保留原位）";
+    const target = suggestion.suggestedPath || t("preview.keepInPlace");
     const degradeNote = degradedFrom
-      ? `\n（层级${degradedFrom}不可用，已降级到层级${suggestion.engine}）`
+      ? t("notify.degraded", { from: degradedFrom, to: suggestion.engine })
       : "";
     new Notice(
-      `「${file.basename}」建议 → ${target}\n${suggestion.reason}${degradeNote}`,
+      t("notify.suggestTo", {
+        name: file.basename,
+        to: target,
+        reason: suggestion.reason,
+        degraded: degradeNote,
+      }),
       8000
     );
   }
 
-  /** 整理 Inbox 命令：带进度与结果摘要 */
+  /** 整理 Inbox 命令：带进度，完成后打开整理报告（含撤销） */
   private async organizeInboxCommand(): Promise<void> {
-    const progress = new Notice("开始整理…", 0);
+    const progress = new Notice(t("notify.inboxStart"), 0);
     const result = await this.organizerService.organizeInbox("auto", (done, total, name) => {
-      progress.setMessage(`整理中 ${done}/${total}：${name}`);
+      progress.setMessage(t("notify.inboxProgress", { done, total, name }));
     });
     progress.hide();
 
-    new Notice(
-      `整理完成：移动 ${result.moved} 篇，跳过 ${result.skipped} 篇` +
-        (result.errors.length ? `，失败 ${result.errors.length} 篇` : "")
-    );
     if (result.errors.length > 0) {
       console.warn("[SmartNotes] 整理错误：", result.errors);
     }
+    new Notice(
+      t("notify.inboxDone", {
+        moved: result.moved,
+        skipped: result.skipped,
+        errors: result.errors.length
+          ? t("notify.inboxErrors", { n: result.errors.length })
+          : "",
+      })
+    );
+    new BatchReportModal(this.app, this, result.entries).open();
   }
 
   /** 导出共享配置（层级四，需先重建层级二缓存） */

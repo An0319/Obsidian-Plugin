@@ -9,21 +9,24 @@ import {
   TFolder,
   requestUrl,
 } from "obsidian";
-import { SmartNotesSettings, DEFAULT_SETTINGS } from "./settings";
+import { SmartNotesSettings, DEFAULT_SETTINGS, AutoOrganizeMode } from "./settings";
 import { EngineLevel, OrganizeRule, RuleField, RuleOperator } from "../types";
 import { SharedModelEngine } from "../engines/sharedModelEngine";
 import { OllamaEngine, HttpClient } from "../engines/ollamaEngine";
 import { ActivityLog } from "../services/fileOrganizer";
 import { collectFolderPaths } from "../services/seedFolderMapper";
-import { collectUserFolders } from "../services/vaultFolders";
-import { MAX_DISPLAY_FOLDERS, UserFolder } from "../services/userFolders";
+import { collectUserFolderTree } from "../services/vaultFolders";
+import { UserFolderNode, MAX_TREE_NODES } from "../services/userFolders";
+import { describeRule } from "../services/ruleDescribe";
+import { parentFolder } from "../services/fileOrganizer";
 import {
   CUSTOM_RULES_PATH,
   parseCustomRules,
   buildSampleRulesJson,
   writeSampleRulesFile,
 } from "../services/customRulesLoader";
-import { describeRule } from "../services/ruleDescribe";
+import { ConfirmActionModal } from "../ui/batchReportModal";
+import { t, setLocale, Locale } from "../i18n";
 import SmartNotesPlugin from "../main";
 
 /** Obsidian requestUrl 适配器（跨平台无 CORS 限制），带整体超时保护 */
@@ -109,39 +112,6 @@ export function sampleSharedConfig(): string {
   return JSON.stringify(config, null, 2);
 }
 
-/** 单条规则编辑弹窗 */
-/** 覆盖确认弹窗：样例文件已存在时使用 */
-class SampleOverwriteModal extends Modal {
-  constructor(
-    app: App,
-    private message: string,
-    private onConfirm: () => void
-  ) {
-    super(app);
-  }
-
-  onOpen(): void {
-    this.contentEl.empty();
-    this.contentEl.createEl("h3", { text: "覆盖确认" });
-    this.contentEl.createEl("p", { text: this.message });
-    new Setting(this.contentEl)
-      .addButton((b) =>
-        b
-          .setButtonText("覆盖")
-          .setWarning()
-          .onClick(() => {
-            this.onConfirm();
-            this.close();
-          })
-      )
-      .addButton((b) => b.setButtonText("取消").onClick(() => this.close()));
-  }
-
-  onClose(): void {
-    this.contentEl.empty();
-  }
-}
-
 /** 目标文件夹输入建议：候选为库内已有文件夹，选中后回写规则 */
 class FolderInputSuggest extends AbstractInputSuggest<TFolder> {
   constructor(
@@ -172,6 +142,7 @@ class FolderInputSuggest extends AbstractInputSuggest<TFolder> {
   }
 }
 
+/** 单条规则编辑弹窗 */
 class RuleEditModal extends Modal {
   constructor(
     app: App,
@@ -186,114 +157,118 @@ class RuleEditModal extends Modal {
   onOpen(): void {
     const { contentEl } = this;
     contentEl.empty();
-    contentEl.createEl("h3", { text: this.isNew ? "新建规则" : "编辑规则" });
+    contentEl.addClass("smart-notes-edit-modal");
+    contentEl.createEl("h3", { text: this.isNew ? t("rules.editTitleNew") : t("rules.editTitleEdit") });
 
     const rule = { ...this.rule };
 
-    new Setting(contentEl).setName("规则名称").addText((t) =>
-      t.setValue(rule.name).onChange((v) => (rule.name = v))
+    new Setting(contentEl).setName(t("rules.name")).addText((tx) =>
+      tx.setValue(rule.name).onChange((v) => (rule.name = v))
     );
 
     new Setting(contentEl)
-      .setName("匹配字段")
+      .setName(t("rules.field"))
       .addDropdown((d) =>
         d
           .addOptions({
-            [RuleField.Title]: "标题",
-            [RuleField.Content]: "笔记内容",
-            [RuleField.Tag]: "标签",
-            [RuleField.Filename]: "文件名 / 路径",
-            [RuleField.ModifiedTime]: "修改时间",
+            [RuleField.Title]: t("rules.field.title"),
+            [RuleField.Content]: t("rules.field.content"),
+            [RuleField.Tag]: t("rules.field.tag"),
+            [RuleField.Filename]: t("rules.field.filename"),
+            [RuleField.ModifiedTime]: t("rules.field.mtime"),
           })
           .setValue(rule.field)
           .onChange((v) => (rule.field = v as RuleField))
       );
 
     new Setting(contentEl)
-      .setName("匹配方式")
+      .setName(t("rules.operator"))
       .addDropdown((d) =>
         d
           .addOptions({
-            [RuleOperator.Contains]: "含有某些文字（推荐）",
-            [RuleOperator.Equals]: "完全等于",
-            [RuleOperator.Regex]: "按固定规律匹配（正则，进阶）",
-            [RuleOperator.OlderThanDays]: "超过 N 天未修改",
-            [RuleOperator.Always]: "所有笔记都适用（兜底）",
+            [RuleOperator.Contains]: t("rules.op.contains"),
+            [RuleOperator.Equals]: t("rules.op.equals"),
+            [RuleOperator.Regex]: t("rules.op.regex"),
+            [RuleOperator.OlderThanDays]: t("rules.op.olderThanDays"),
+            [RuleOperator.Always]: t("rules.op.always"),
           })
           .setValue(rule.operator)
           .onChange((v) => (rule.operator = v as RuleOperator))
       );
 
     new Setting(contentEl)
-      .setName("匹配模式")
+      .setName(t("rules.pattern"))
       .setDesc(
         rule.operator === RuleOperator.OlderThanDays
-          ? "填写天数，如：30 表示超过 30 天未修改"
+          ? t("rules.pattern.days")
           : rule.operator === RuleOperator.Always
-            ? "兜底规则无需填写"
+            ? t("rules.pattern.always")
             : rule.operator === RuleOperator.Regex
-              ? "进阶写法：用符号描述文字规律，如 ^日记 表示以「日记」开头。日常需求选「含有某些文字」就够了"
-              : "填写笔记中要找的文字，如：投资"
+              ? t("rules.pattern.regex")
+              : t("rules.pattern.default")
       )
-      .addText((t) =>
-        t
+      .addText((tx) =>
+        tx
           .setPlaceholder(
             rule.operator === RuleOperator.OlderThanDays
-              ? "30"
+              ? t("rules.pattern.placeholder.days")
               : rule.operator === RuleOperator.Always
                 ? ""
                 : rule.operator === RuleOperator.Regex
-                  ? "如：^日记"
-                  : "如：投资"
+                  ? t("rules.pattern.placeholder.regex")
+                  : t("rules.pattern.placeholder.default")
           )
           .setValue(rule.pattern)
           .onChange((v) => (rule.pattern = v))
       );
 
-    new Setting(contentEl).setName("目标文件夹")
-      .setDesc("从库内已有文件夹选择，或直接输入新路径（首次移动时自动创建）")
-      .addText((t) => {
-        t.setPlaceholder("如：02-战略/竞品").setValue(rule.targetFolder).onChange((v) => (rule.targetFolder = v));
-        new FolderInputSuggest(this.app, t.inputEl, (path) => {
+    new Setting(contentEl)
+      .setName(t("rules.target"))
+      .setDesc(t("rules.targetDesc"))
+      .addText((tx) => {
+        tx.setPlaceholder(t("rules.targetPlaceholder"))
+          .setValue(rule.targetFolder)
+          .onChange((v) => (rule.targetFolder = v));
+        new FolderInputSuggest(this.app, tx.inputEl, (path) => {
           rule.targetFolder = path;
-          t.setValue(path);
+          tx.setValue(path);
         }, this.excludedFolders);
-        return t;
+        return tx;
       });
 
     new Setting(contentEl)
-      .setName("权重（可选）")
-      .setDesc("0~1，影响命中时的置信度；留空或 1 表示默认置信度")
-      .addText((t) => {
-        t.setPlaceholder("如：0.9")
+      .setName(t("rules.weight"))
+      .setDesc(t("rules.weightDesc"))
+      .addText((tx) => {
+        tx.setPlaceholder(t("rules.weightPlaceholder"))
           .setValue(rule.weight !== undefined ? String(rule.weight) : "")
           .onChange((v) => {
             const n = Number(v);
             if (v.trim() === "") delete rule.weight;
             else if (Number.isFinite(n) && n >= 0 && n <= 1) rule.weight = n;
           });
-        return t;
+        return tx;
       });
 
     new Setting(contentEl)
       .addButton((b) =>
         b
-          .setButtonText("保存")
+          .setButtonText(t("common.save"))
           .setCta()
-            .onClick(() => {
-              if (!rule.name) {
-                new Notice("规则名称不能为空");
-                return;
-              }
-              if (rule.operator !== RuleOperator.Always && !rule.pattern) {
-                new Notice("匹配模式不能为空");
-                return;
-              }
-              this.onSave(rule);
-              this.close();
-            })
+          .onClick(() => {
+            if (!rule.name) {
+              new Notice(t("rules.nameEmpty"));
+              return;
+            }
+            if (rule.operator !== RuleOperator.Always && !rule.pattern) {
+              new Notice(t("rules.patternEmpty"));
+              return;
+            }
+            this.onSave(rule);
+            this.close();
+          })
       )
-      .addButton((b) => b.setButtonText("取消").onClick(() => this.close()));
+      .addButton((b) => b.setButtonText(t("common.cancel")).onClick(() => this.close()));
   }
 
   onClose(): void {
@@ -301,7 +276,18 @@ class RuleEditModal extends Modal {
   }
 }
 
-/** 设置面板 */
+/** 设置分页标识 */
+type SettingsTabId = "quickstart" | "rulesFolders" | "intelligence" | "general";
+
+const TAB_IDS: SettingsTabId[] = ["quickstart", "rulesFolders", "intelligence", "general"];
+const TAB_LABEL_KEYS = {
+  quickstart: "tab.quickstart",
+  rulesFolders: "tab.rulesFolders",
+  intelligence: "tab.intelligence",
+  general: "tab.general",
+} as const;
+
+/** 设置面板：分页骨架 + 各分页渲染 */
 export class SmartNotesSettingTab extends PluginSettingTab {
   plugin: SmartNotesPlugin;
 
@@ -315,35 +301,77 @@ export class SmartNotesSettingTab extends PluginSettingTab {
     containerEl.empty();
     containerEl.addClass("smart-notes-settings");
     const settings = this.plugin.settings;
+    setLocale(settings.locale);
 
-    // ===== 快速入门 =====
-    containerEl.createEl("h2", { text: "快速入门" });
-    const quickStart = containerEl.createDiv({ cls: "smart-notes-quickstart" });
-    quickStart.createEl("p", {
-      text: "工作原理：把笔记投入 Inbox → 点击左侧 Ribbon 图标（或自动监听）→ 插件判断归属并移动，内部链接自动更新。全程本地运行，不匹配的笔记保留原位。",
-    });
-    quickStart.createEl("p", {
-      text: "首次配置三步：① 下方确认 Inbox 文件夹名与你的习惯一致；② 建立整理规则——三个起点任选：从已有文件夹一键生成、导入内置规则集、或手工新建；③ 用一篇笔记点 Ribbon 试运行。",
-    });
+    const active = this.normalizeTab(settings.lastSettingsTab);
+
+    // 跨页引导：种子规则未导入
     if (!settings.rules.some((r) => r.id.startsWith("seed-"))) {
-      quickStart.createEl("p", {
-        cls: "smart-notes-quickstart-hint",
-        text: "尚未导入内置规则集——在「层级一：规则映射」分区点击「导入种子规则」即可开始。",
+      containerEl.createEl("div", {
+        cls: "smart-notes-banner",
+        text: t("quick.hintNoSeed"),
       });
     }
 
-    // ===== 引擎选择 =====
-    containerEl.createEl("h2", { text: "整理引擎" });
-    new Setting(containerEl)
-      .setName("当前引擎层级")
-      .setDesc("层级一零门槛开箱即用；层级二无需 AI 模型；层级三需本地 Ollama；层级四零计算享受共享智慧")
+    this.renderTabBar(containerEl, active);
+
+    const page = containerEl.createDiv({ cls: "smart-notes-page" });
+    switch (active) {
+      case "quickstart":
+        this.renderQuickStartPage(page);
+        break;
+      case "rulesFolders":
+        this.renderRulesFoldersPage(page);
+        break;
+      case "intelligence":
+        this.renderIntelligencePage(page);
+        break;
+      case "general":
+        this.renderGeneralPage(page);
+        break;
+    }
+  }
+
+  private normalizeTab(value: string): SettingsTabId {
+    return (TAB_IDS as string[]).includes(value) ? (value as SettingsTabId) : "quickstart";
+  }
+
+  /** 分页导航：segmented 样式，切换时记住分页 */
+  private renderTabBar(container: HTMLElement, active: SettingsTabId): void {
+    const bar = container.createDiv({ cls: "smart-notes-tabs" });
+    for (const id of TAB_IDS) {
+      const btn = bar.createEl("button", {
+        cls: `smart-notes-tab${id === active ? " is-active" : ""}`,
+        text: t(TAB_LABEL_KEYS[id]),
+      });
+      btn.addEventListener("click", async () => {
+        this.plugin.settings.lastSettingsTab = id;
+        await this.plugin.saveSettings();
+        this.display();
+      });
+    }
+  }
+
+  // ===== 分页一：快速开始 =====
+  private renderQuickStartPage(container: HTMLElement): void {
+    const settings = this.plugin.settings;
+
+    container.createEl("h2", { text: t("quick.title") });
+    const quickStart = container.createDiv({ cls: "smart-notes-quickstart" });
+    quickStart.createEl("p", { text: t("quick.flow") });
+    quickStart.createEl("p", { text: t("quick.steps") });
+
+    container.createEl("h2", { text: t("engine.title") });
+    new Setting(container)
+      .setName(t("engine.level"))
+      .setDesc(t("engine.levelDesc"))
       .addDropdown((d) =>
         d
           .addOptions({
-            [String(EngineLevel.Rules)]: "层级一：规则映射",
-            [String(EngineLevel.Tfidf)]: "层级二：TF-IDF 智能匹配",
-            [String(EngineLevel.Ollama)]: "层级三：本地大模型（Ollama）",
-            [String(EngineLevel.SharedModel)]: "层级四：社区共享配置",
+            [String(EngineLevel.Rules)]: t("engine.l1"),
+            [String(EngineLevel.Tfidf)]: t("engine.l2"),
+            [String(EngineLevel.Ollama)]: t("engine.l3"),
+            [String(EngineLevel.SharedModel)]: t("engine.l4"),
           })
           .setValue(String(settings.engineLevel))
           .onChange(async (v) => {
@@ -351,25 +379,30 @@ export class SmartNotesSettingTab extends PluginSettingTab {
             await this.plugin.saveSettings();
           })
       );
+  }
 
-    // ===== 层级一：规则列表 =====
-    containerEl.createEl("h3", { text: "层级一：规则映射" });
-    containerEl.createEl("p", {
+  // ===== 分页二：规则与文件夹 =====
+  private renderRulesFoldersPage(container: HTMLElement): void {
+    const settings = this.plugin.settings;
+
+    container.createEl("h2", { text: t("rules.title") });
+    container.createEl("p", {
       cls: "setting-item-description",
-      text: "规则按顺序逐条匹配，命中即移动；条件支持文件名 / 标题 / 内容 / 标签 / 修改时间。目标文件夹输入框支持从库内已有文件夹中选择。",
+      text: t("rules.desc"),
     });
-    this.renderRules();
-    new Setting(containerEl)
-      .setName("种子规则集")
-      .setDesc("一键导入默认规则（日志归位 / 归档陈旧笔记 / 收件箱兜底）；已有同名规则会跳过，目标文件夹自动复用你库内已有的同名或等价文件夹")
+    this.renderRules(container);
+
+    new Setting(container)
+      .setName(t("seed.label"))
+      .setDesc(t("seed.desc"))
       .addButton((b) =>
-        b.setButtonText("导入种子规则").onClick(async () => {
+        b.setButtonText(t("seed.button")).onClick(async () => {
           const { defaultRules } = await import("../engines/ruleEngine");
           const { collectFolderPaths, mapSeedFolders } = await import("../services/seedFolderMapper");
           const existing = new Set(settings.rules.map((r) => r.id));
           const incoming = defaultRules().filter((r) => !existing.has(r.id));
           if (incoming.length === 0) {
-            new Notice("种子规则已存在，无需重复导入");
+            new Notice(t("seed.alreadyImported"));
             return;
           }
           const mappings = mapSeedFolders(
@@ -387,44 +420,42 @@ export class SmartNotesSettingTab extends PluginSettingTab {
           const lines = incoming.map((r) => {
             const m = byId.get(r.id);
             return m?.reused
-              ? `${r.name} → ${m.mappedFolder}（复用已有文件夹）`
-              : `${r.name} → ${m?.mappedFolder}（首次移动时创建）`;
+              ? `${r.name} → ${m.mappedFolder}`
+              : `${r.name} → ${m?.mappedFolder}`;
           });
-          new Notice(`已导入 ${incoming.length} 条种子规则：\n${lines.join("\n")}`, 8000);
+          new Notice(t("seed.imported", { n: incoming.length, detail: lines.join("\n") }), 8000);
         })
       );
 
-    // ===== 从已有文件夹开始 =====
-    containerEl.createEl("h3", { text: "从已有文件夹开始" });
-    containerEl.createEl("p", {
+    container.createEl("h2", { text: t("folders.title") });
+    container.createEl("p", {
       cls: "setting-item-description",
-      text: "库里已经分好类的文件夹可以直接利用：点「建规则」会打开规则编辑器，目标文件夹和匹配内容已帮你填好，改一下就能保存使用。",
+      text: t("folders.desc"),
     });
-    this.renderExistingFolders();
+    this.renderFolderTree(container);
 
-    new Setting(containerEl)
-      .setName("custom_rules.json")
-      .setDesc("在库的最外层放一个名为 custom_rules.json 的规则文件，点「从库根导入」即可批量添加规则。没有该文件可先点「生成样例文件」获得一份可直接修改的示例。")
+    new Setting(container)
+      .setName(t("customRules.label"))
+      .setDesc(t("customRules.desc"))
       .addButton((b) =>
-        b.setButtonText("生成样例文件").onClick(async () => {
+        b.setButtonText(t("customRules.sample")).onClick(async () => {
           const doWrite = async () => {
             try {
               await writeSampleRulesFile(this.app);
               this.display();
-              new Notice(
-                `已在库的最外层创建 ${CUSTOM_RULES_PATH} 示例文件：打开修改后，点「从库根导入」即可体验`,
-                10000
-              );
+              new Notice(t("customRules.sampleDone"), 10000);
             } catch (err) {
-              new Notice(`创建失败：${err instanceof Error ? err.message : String(err)}`, 8000);
+              new Notice(t("customRules.sampleFail", { msg: err instanceof Error ? err.message : String(err) }), 8000);
             }
           };
           const exists = this.app.vault.getAbstractFileByPath(CUSTOM_RULES_PATH) instanceof TFile;
           if (exists) {
-            new SampleOverwriteModal(
+            new ConfirmActionModal(
               this.app,
-              `库的最外层已有 ${CUSTOM_RULES_PATH}，生成样例会覆盖现有内容，确定继续吗？`,
-              doWrite
+              t("customRules.confirmOverwriteTitle"),
+              t("customRules.confirmOverwrite"),
+              t("customRules.overwrite"),
+              () => void doWrite()
             ).open();
           } else {
             await doWrite();
@@ -432,17 +463,17 @@ export class SmartNotesSettingTab extends PluginSettingTab {
         })
       )
       .addButton((b) =>
-        b.setButtonText("从库根导入").onClick(async () => {
+        b.setButtonText(t("customRules.import")).onClick(async () => {
           const file = this.app.vault.getAbstractFileByPath(CUSTOM_RULES_PATH);
           if (!(file instanceof TFile)) {
-            new Notice(`未找到 ${CUSTOM_RULES_PATH}——请在库根目录创建后重试`, 8000);
+            new Notice(t("customRules.notFound"), 8000);
             return;
           }
           let json: string;
           try {
             json = await this.app.vault.cachedRead(file);
           } catch (err) {
-            new Notice(`读取失败：${err instanceof Error ? err.message : String(err)}`);
+            new Notice(t("customRules.readFail", { msg: err instanceof Error ? err.message : String(err) }));
             return;
           }
           try {
@@ -454,8 +485,8 @@ export class SmartNotesSettingTab extends PluginSettingTab {
             this.display();
             new Notice(
               fresh.length === rules.length
-                ? `已从 ${description} 导入 ${fresh.length} 条规则`
-                : `导入 ${fresh.length} 条，跳过 ${rules.length - fresh.length} 条已存在（id 重复）`,
+                ? t("customRules.importedFrom", { desc: description, n: fresh.length })
+                : t("customRules.importedPartial", { n: fresh.length, m: rules.length - fresh.length }),
               8000
             );
           } catch (err) {
@@ -463,16 +494,21 @@ export class SmartNotesSettingTab extends PluginSettingTab {
           }
         })
       );
+  }
 
-    // ===== 层级二 =====
-    containerEl.createEl("h3", { text: "层级二：TF-IDF 智能匹配" });
-    containerEl.createEl("p", {
+  // ===== 分页三：智能与模型 =====
+  private renderIntelligencePage(container: HTMLElement): void {
+    const settings = this.plugin.settings;
+
+    // 层级二
+    container.createEl("h2", { text: t("tfidf.title") });
+    container.createEl("p", {
       cls: "setting-item-description",
-      text: "从你已有文件夹的内容中学习特征向量：某文件夹笔记越多，相似的新笔记越容易被归入其中。无需配置即可跟随你的目录结构。",
+      text: t("tfidf.desc"),
     });
-    new Setting(containerEl)
-      .setName("相似度阈值")
-      .setDesc(`当前 ${(settings.tfidfThreshold * 100).toFixed(0)}%，低于该值时建议保留原位`)
+    new Setting(container)
+      .setName(t("tfidf.threshold"))
+      .setDesc(t("tfidf.thresholdDesc", { pct: (settings.tfidfThreshold * 100).toFixed(0) }))
       .addSlider((s) =>
         s
           .setLimits(0.1, 0.9, 0.05)
@@ -484,11 +520,11 @@ export class SmartNotesSettingTab extends PluginSettingTab {
             await this.plugin.saveSettings();
           })
       );
-    new Setting(containerEl)
-      .setName("参与计算的笔记上限")
-      .setDesc("每文件夹按最新优先截取，避免大库卡顿")
-      .addText((t) =>
-        t
+    new Setting(container)
+      .setName(t("tfidf.maxNotes"))
+      .setDesc(t("tfidf.maxNotesDesc"))
+      .addText((tx) =>
+        tx
           .setValue(String(settings.tfidfMaxNotes))
           .onChange(async (v) => {
             const n = parseInt(v, 10);
@@ -499,40 +535,40 @@ export class SmartNotesSettingTab extends PluginSettingTab {
             }
           })
       );
-    new Setting(containerEl)
-      .setName("重建特征缓存")
-      .setDesc("文件夹内容变更会自动重算，也可手动触发")
+    new Setting(container)
+      .setName(t("tfidf.rebuild"))
+      .setDesc(t("tfidf.rebuildDesc"))
       .addButton((b) =>
-        b.setButtonText("重建").onClick(async () => {
+        b.setButtonText(t("tfidf.rebuildButton")).onClick(async () => {
           this.plugin.tfidfEngine.invalidateCache();
           await this.plugin.tfidfEngine.initialize();
-          new Notice("文件夹特征已重建");
+          new Notice(t("tfidf.rebuildDone"));
         })
       );
 
-    // ===== 层级三 =====
-    containerEl.createEl("h3", { text: "层级三：本地大模型（Ollama）" });
-    new Setting(containerEl)
-      .setName("Ollama 地址")
-      .addText((t) =>
-        t.setValue(settings.ollama.address).onChange(async (v) => {
+    // 层级三
+    container.createEl("h2", { text: t("ollama.title") });
+    new Setting(container)
+      .setName(t("ollama.address"))
+      .addText((tx) =>
+        tx.setValue(settings.ollama.address).onChange(async (v) => {
           settings.ollama.address = v.trim() || "http://localhost:11434";
           await this.plugin.saveSettings();
         })
       );
-    new Setting(containerEl)
-      .setName("模型名称")
-      .setDesc("默认 qwen2.5:7b，需已通过 ollama pull 下载")
-      .addText((t) =>
-        t.setValue(settings.ollama.model).onChange(async (v) => {
+    new Setting(container)
+      .setName(t("ollama.model"))
+      .setDesc(t("ollama.modelDesc"))
+      .addText((tx) =>
+        tx.setValue(settings.ollama.model).onChange(async (v) => {
           settings.ollama.model = v.trim() || "qwen2.5:7b";
           await this.plugin.saveSettings();
         })
       );
-    new Setting(containerEl)
-      .setName("请求超时（毫秒）")
-      .addText((t) =>
-        t
+    new Setting(container)
+      .setName(t("ollama.timeout"))
+      .addText((tx) =>
+        tx
           .setValue(String(settings.ollama.timeoutMs))
           .onChange(async (v) => {
             const n = parseInt(v, 10);
@@ -542,19 +578,19 @@ export class SmartNotesSettingTab extends PluginSettingTab {
             }
           })
       );
-    new Setting(containerEl)
-      .setName("失败自动降级")
-      .setDesc("Ollama 未运行或超时时自动降级到层级二 / 层级一")
-      .addToggle((t) =>
-        t.setValue(settings.ollama.fallback).onChange(async (v) => {
+    new Setting(container)
+      .setName(t("ollama.fallback"))
+      .setDesc(t("ollama.fallbackDesc"))
+      .addToggle((tx) =>
+        tx.setValue(settings.ollama.fallback).onChange(async (v) => {
           settings.ollama.fallback = v;
           await this.plugin.saveSettings();
         })
       );
-    new Setting(containerEl)
-      .setName("连接测试")
+    new Setting(container)
+      .setName(t("ollama.test"))
       .addButton((b) =>
-        b.setButtonText("测试").onClick(async () => {
+        b.setButtonText(t("ollama.testButton")).onClick(async () => {
           const engine = new OllamaEngine(
             settings.ollama,
             obsidianHttp,
@@ -563,32 +599,32 @@ export class SmartNotesSettingTab extends PluginSettingTab {
           const ok = await engine.isAvailable();
           new Notice(
             ok
-              ? `Ollama 连接成功（${settings.ollama.model}）`
-              : "无法连接 Ollama，请确认服务已启动（ollama serve）"
+              ? t("ollama.testOk", { model: settings.ollama.model })
+              : t("ollama.testFail")
           );
         })
       );
 
-    // ===== 层级四 =====
-    containerEl.createEl("h3", { text: "层级四：社区共享配置" });
+    // 层级四
+    container.createEl("h2", { text: t("shared.title") });
     const statusText = this.plugin.sharedModelEngine.isLoaded
-      ? `已加载：${this.plugin.sharedModelEngine.configName}`
-      : "未加载配置";
-    new Setting(containerEl)
-      .setName("配置状态")
+      ? t("shared.loaded", { name: this.plugin.sharedModelEngine.configName })
+      : t("shared.notLoaded");
+    new Setting(container)
+      .setName(t("shared.status"))
       .setDesc(statusText)
       .addButton((b) =>
-        b.setButtonText("导入示例配置").onClick(async () => {
+        b.setButtonText(t("shared.importSample")).onClick(async () => {
           settings.sharedConfigJson = sampleSharedConfig();
           this.plugin.sharedModelEngine.loadFromJson(settings.sharedConfigJson);
           await this.plugin.saveSettings();
           this.display();
-          new Notice("示例配置已导入");
+          new Notice(t("shared.importSampleDone"));
         })
       );
-    new Setting(containerEl)
-      .setName("导入配置文件")
-      .setDesc("选择社区分享的 JSON 配置文件")
+    new Setting(container)
+      .setName(t("shared.importFile"))
+      .setDesc(t("shared.importFileDesc"))
       .addButton((b) => {
         const input = createEl("input", { type: "file", attr: { accept: ".json" } });
         input.style.display = "none";
@@ -601,19 +637,19 @@ export class SmartNotesSettingTab extends PluginSettingTab {
             settings.sharedConfigJson = text;
             await this.plugin.saveSettings();
             this.display();
-            new Notice(`已导入配置「${this.plugin.sharedModelEngine.configName}」`);
+            new Notice(t("shared.imported", { name: this.plugin.sharedModelEngine.configName }));
           } catch (err) {
-            new Notice(`导入失败：${err instanceof Error ? err.message : String(err)}`);
+            new Notice(t("shared.importFail", { msg: err instanceof Error ? err.message : String(err) }));
           }
         });
         b.buttonEl.parentElement?.appendChild(input);
-        b.setButtonText("选择文件").onClick(() => input.click());
+        b.setButtonText(t("shared.chooseFile")).onClick(() => input.click());
       });
-    new Setting(containerEl)
-      .setName("导出当前配置")
-      .setDesc("导出规则 + 预计算文件夹向量，可分享到社区（建议层级二缓存重建后导出）")
+    new Setting(container)
+      .setName(t("shared.export"))
+      .setDesc(t("shared.exportDesc"))
       .addButton((b) =>
-        b.setButtonText("导出 JSON").onClick(async () => {
+        b.setButtonText(t("shared.exportButton")).onClick(async () => {
           try {
             const json = await this.plugin.exportSharedConfig("我的整理配置");
             const blob = new Blob([json], { type: "application/json" });
@@ -622,163 +658,149 @@ export class SmartNotesSettingTab extends PluginSettingTab {
             a.download = "smart-notes-config.json";
             a.click();
             URL.revokeObjectURL(url);
-            new Notice("配置已导出下载");
+            new Notice(t("shared.exported"));
           } catch (err) {
-            new Notice(`导出失败：${err instanceof Error ? err.message : String(err)}`);
+            new Notice(t("shared.exportFail", { msg: err instanceof Error ? err.message : String(err) }));
           }
         })
       );
+  }
 
-    // ===== 通用设置 =====
-    containerEl.createEl("h2", { text: "通用设置" });
-    containerEl.createEl("p", {
+  // ===== 分页四：通用 =====
+  private renderGeneralPage(container: HTMLElement): void {
+    const settings = this.plugin.settings;
+
+    container.createEl("h2", { text: t("general.title") });
+    container.createEl("p", {
       cls: "setting-item-description",
-      text: "Inbox 文件夹名、排除范围与日志开关。排除的文件夹插件永不触碰，附件与模板目录默认已在白名单内。",
+      text: t("general.desc"),
     });
-    new Setting(containerEl)
-      .setName("启用自动整理")
-      .setDesc("监听新建笔记并自动给出整理建议")
-      .addToggle((t) =>
-        t.setValue(settings.autoOrganize).onChange(async (v) => {
-          settings.autoOrganize = v;
-          await this.plugin.saveSettings();
-        })
+    new Setting(container)
+      .setName(t("general.autoMode"))
+      .setDesc(t("general.autoModeDesc"))
+      .addDropdown((d) =>
+        d
+          .addOptions({
+            [String(AutoOrganizeMode.Off)]: t("general.auto.off"),
+            [String(AutoOrganizeMode.Notify)]: t("general.auto.notify"),
+            [String(AutoOrganizeMode.Move)]: t("general.auto.move"),
+          })
+          .setValue(String(settings.autoOrganizeMode))
+          .onChange(async (v) => {
+            settings.autoOrganizeMode = Number(v) as AutoOrganizeMode;
+            await this.plugin.saveSettings();
+          })
       );
-    new Setting(containerEl)
-      .setName("Inbox 文件夹名")
-      .setDesc("自动整理只处理该文件夹内的新笔记；留空则处理全库")
-      .addText((t) =>
-        t.setValue(settings.inboxFolder).onChange(async (v) => {
+    new Setting(container)
+      .setName(t("general.inbox"))
+      .setDesc(t("general.inboxDesc"))
+      .addText((tx) =>
+        tx.setValue(settings.inboxFolder).onChange(async (v) => {
           settings.inboxFolder = v.trim();
           await this.plugin.saveSettings();
         })
       );
-    new Setting(containerEl)
-      .setName("未归类文件夹")
-      .setDesc("所有引擎均无建议时的兜底目标；留空则保留原位")
-      .addText((t) =>
-        t.setValue(settings.unclassifiedFolder).onChange(async (v) => {
+    new Setting(container)
+      .setName(t("general.unclassified"))
+      .setDesc(t("general.unclassifiedDesc"))
+      .addText((tx) =>
+        tx.setValue(settings.unclassifiedFolder).onChange(async (v) => {
           settings.unclassifiedFolder = v.trim();
           await this.plugin.saveSettings();
         })
       );
-    new Setting(containerEl)
-      .setName("排除文件夹")
-      .setDesc("逗号分隔，这些文件夹及其子目录不参与整理与特征计算")
-      .addText((t) =>
-        t
+    new Setting(container)
+      .setName(t("general.excluded"))
+      .setDesc(t("general.excludedDesc"))
+      .addText((tx) =>
+        tx
           .setValue(settings.excludedFolders.join(", "))
           .onChange(async (v) => {
             settings.excludedFolders = v.split(",").map((s) => s.trim()).filter(Boolean);
             await this.plugin.saveSettings();
           })
       );
-    new Setting(containerEl)
-      .setName("记录整理日志")
-      .setDesc("保存最近 200 次移动记录到插件目录（organize-log.json），便于追溯")
-      .addToggle((t) =>
-        t.setValue(settings.enableLog).onChange(async (v) => {
+    new Setting(container)
+      .setName(t("general.locale"))
+      .setDesc(t("general.localeDesc"))
+      .addDropdown((d) =>
+        d
+          .addOptions({
+            auto: t("general.locale.auto"),
+            zh: t("general.locale.zh"),
+            en: t("general.locale.en"),
+          })
+          .setValue(settings.locale)
+          .onChange(async (v) => {
+            settings.locale = v as Locale;
+            setLocale(settings.locale);
+            await this.plugin.saveSettings();
+            this.display();
+          })
+      );
+    new Setting(container)
+      .setName(t("general.enableLog"))
+      .setDesc(t("general.enableLogDesc"))
+      .addToggle((tx) =>
+        tx.setValue(settings.enableLog).onChange(async (v) => {
           settings.enableLog = v;
           await this.plugin.saveSettings();
         })
       );
-    new Setting(containerEl)
-      .setName("恢复默认设置")
+    new Setting(container)
+      .setName(t("general.reset"))
       .addButton((b) =>
-        b.setButtonText("重置").setWarning().onClick(async () => {
-          this.plugin.settings = Object.assign({}, DEFAULT_SETTINGS);
+        b.setButtonText(t("general.resetButton")).setWarning().onClick(async () => {
+          this.plugin.settings = Object.assign({}, DEFAULT_SETTINGS, {
+            rules: DEFAULT_SETTINGS.rules,
+          });
           await this.plugin.saveSettings();
+          setLocale(this.plugin.settings.locale);
           this.display();
-          new Notice("已恢复默认设置");
+          new Notice(t("general.resetDone"));
         })
       );
 
-    // ===== 日志 =====
-    containerEl.createEl("h2", { text: "最近整理记录" });
-    containerEl.createEl("p", {
+    container.createEl("h2", { text: t("log.title") });
+    container.createEl("p", {
       cls: "setting-item-description",
-      text: "仅保留最近 200 条移动记录（organize-log.json，存于插件目录），超出自动丢弃最旧的。数据完全本地保存，可随时清空。",
+      text: t("log.desc"),
     });
     const log = new ActivityLog(this.app, this.plugin.manifest.dir ?? "");
-    new Setting(containerEl)
-      .setName("清空整理记录")
-      .setDesc("删除全部历史记录，此操作不可恢复")
+    new Setting(container)
+      .setName(t("log.clear"))
+      .setDesc(t("log.clearDesc"))
       .addButton((b) =>
-        b.setButtonText("清空").setWarning().onClick(async () => {
+        b.setButtonText(t("log.clearButton")).setWarning().onClick(async () => {
           await log.clear();
           this.display();
-          new Notice("整理记录已清空");
+          new Notice(t("log.cleared"));
         })
       );
     void log.read().then((entries) => {
       if (entries.length === 0) {
-        containerEl.createEl("p", { text: "暂无记录" });
+        container.createEl("p", { cls: "smart-notes-log-empty", text: t("log.empty") });
         return;
       }
       for (const entry of entries.slice(0, 20)) {
-        const line = containerEl.createEl("p", {
-          text: `${entry.time.slice(0, 16).replace("T", " ")}  ${entry.file}: ${entry.from || "(根)"} -> ${entry.to}  [${entry.engine}]`,
+        container.createEl("p", {
+          text: `${entry.time.slice(0, 16).replace("T", " ")}  ${entry.file}: ${entry.from || "/"} -> ${entry.to}  [${entry.engine}]`,
           cls: "smart-notes-log-line",
         });
       }
     });
   }
 
-  /** 渲染「从已有文件夹开始」分区：用户文件夹列表 + 一键建规则草稿 */
-  private renderExistingFolders(): void {
-    const settings = this.plugin.settings;
-    const folders = collectUserFolders(this.app, settings.excludedFolders);
-
-    if (folders.length === 0) {
-      this.containerEl.createEl("p", {
-        cls: "setting-item-description",
-        text: "还没有可用的文件夹——先在库里建一个分类文件夹，或用上方内置规则开始。",
-      });
-      return;
-    }
-
-    const shown = folders.slice(0, MAX_DISPLAY_FOLDERS);
-    for (const folder of shown) {
-      new Setting(this.containerEl)
-        .setName(folder.name)
-        .setDesc(`路径 ${folder.path} · ${folder.noteCount} 篇笔记`)
-        .addButton((b) =>
-          b.setButtonText("建规则").onClick(() => {
-            const draft: OrganizeRule = {
-              id: `rule-${Date.now()}`,
-              name: `整理到 ${folder.name}`,
-              field: RuleField.Filename,
-              operator: RuleOperator.Contains,
-              pattern: folder.name,
-              targetFolder: folder.path,
-              enabled: true,
-            };
-            new RuleEditModal(this.app, draft, true, settings.excludedFolders, async (created) => {
-              settings.rules.push(created);
-              await this.plugin.saveSettings();
-              this.display();
-              new Notice(`规则「${created.name}」已添加`);
-            }).open();
-          })
-        );
-    }
-    if (folders.length > shown.length) {
-      this.containerEl.createEl("p", {
-        cls: "setting-item-description",
-        text: `共 ${folders.length} 个文件夹，仅展示前 ${shown.length} 个——其余可在规则编辑器的目标文件夹输入框中直接选择。`,
-      });
-    }
-  }
-
   /** 渲染规则列表（按顺序即优先级，支持上下移动 / 启停 / 删除） */
-  private renderRules(): void {    const settings = this.plugin.settings;
-    const wrap = this.containerEl.createDiv({ cls: "smart-notes-rules" });
+  private renderRules(container: HTMLElement): void {
+    const settings = this.plugin.settings;
+    const wrap = container.createDiv({ cls: "smart-notes-rules" });
     settings.rules.forEach((rule, index) => {
       const setting = new Setting(wrap)
         .setName(`${index + 1}. ${rule.name}`)
         .setDesc(`${describeRule(rule)} → ${rule.targetFolder}`);
-      setting.addToggle((t) =>
-        t.setValue(rule.enabled).onChange(async (v) => {
+      setting.addToggle((tx) =>
+        tx.setValue(rule.enabled).onChange(async (v) => {
           rule.enabled = v;
           await this.plugin.saveSettings();
         })
@@ -786,7 +808,7 @@ export class SmartNotesSettingTab extends PluginSettingTab {
       setting.addExtraButton((b) =>
         b
           .setIcon("arrow-up")
-          .setTooltip("上移（提高优先级）")
+          .setTooltip(t("rules.upTip"))
           .onClick(async () => {
             if (index === 0) return;
             const [r] = settings.rules.splice(index, 1);
@@ -798,7 +820,7 @@ export class SmartNotesSettingTab extends PluginSettingTab {
       setting.addExtraButton((b) =>
         b
           .setIcon("arrow-down")
-          .setTooltip("下移（降低优先级）")
+          .setTooltip(t("rules.downTip"))
           .onClick(async () => {
             if (index === settings.rules.length - 1) return;
             const [r] = settings.rules.splice(index, 1);
@@ -808,7 +830,7 @@ export class SmartNotesSettingTab extends PluginSettingTab {
           })
       );
       setting.addButton((b) =>
-        b.setIcon("pencil").setTooltip("编辑").onClick(() => {
+        b.setIcon("pencil").setTooltip(t("rules.editTip")).onClick(() => {
           new RuleEditModal(this.app, rule, false, settings.excludedFolders, async (updated) => {
             settings.rules[index] = updated;
             await this.plugin.saveSettings();
@@ -817,7 +839,7 @@ export class SmartNotesSettingTab extends PluginSettingTab {
         })
       );
       setting.addButton((b) =>
-        b.setIcon("trash").setTooltip("删除").onClick(async () => {
+        b.setIcon("trash").setTooltip(t("rules.deleteTip")).onClick(async () => {
           settings.rules.splice(index, 1);
           await this.plugin.saveSettings();
           this.display();
@@ -826,7 +848,7 @@ export class SmartNotesSettingTab extends PluginSettingTab {
     });
     new Setting(wrap).addButton((b) =>
       b
-        .setButtonText("新建规则")
+        .setButtonText(t("rules.new"))
         .setCta()
         .onClick(() => {
           const blank: OrganizeRule = {
@@ -845,6 +867,109 @@ export class SmartNotesSettingTab extends PluginSettingTab {
           }).open();
         })
     );
+  }
+
+  /** 渲染「从已有文件夹开始」：任意深度折叠树 + 一键建规则草稿 */
+  private renderFolderTree(container: HTMLElement): void {
+    const settings = this.plugin.settings;
+    const nodes = collectUserFolderTree(this.app, settings.excludedFolders);
+
+    if (nodes.length === 0) {
+      container.createEl("p", {
+        cls: "setting-item-description",
+        text: t("folders.empty"),
+      });
+      return;
+    }
+
+    const collapseDefault = nodes.length > MAX_TREE_NODES;
+    const byParent = new Map<string, UserFolderNode[]>();
+    for (const node of nodes) {
+      const parent = parentFolder(node.path);
+      const list = byParent.get(parent) ?? [];
+      list.push(node);
+      byParent.set(parent, list);
+    }
+
+    const tree = container.createDiv({ cls: "smart-notes-tree" });
+    const buildLevel = (parentPath: string, host: HTMLElement) => {
+      for (const node of byParent.get(parentPath) ?? []) {
+        const children = byParent.get(node.path) ?? [];
+        const hasChildren = children.length > 0;
+        const item = host.createDiv({ cls: "smart-notes-tree-item" });
+        const row = item.createDiv({
+          cls: `smart-notes-tree-row${hasChildren ? " is-expandable" : ""}`,
+        });
+
+        const chevron = row.createSpan({
+          cls: `smart-notes-tree-chevron${hasChildren ? "" : " is-leaf"}`,
+          text: "▸",
+        });
+        const name = row.createSpan({
+          cls: "smart-notes-tree-name",
+          text: node.name,
+        });
+        name.addEventListener("click", () => {
+          if (!hasChildren) return;
+          item.toggleClass("is-open", !item.hasClass("is-open"));
+        });
+        chevron.addEventListener("click", () => {
+          if (!hasChildren) return;
+          item.toggleClass("is-open", !item.hasClass("is-open"));
+        });
+        row.createSpan({
+          cls: "smart-notes-tree-count",
+          text: String(node.noteCount),
+        });
+        const buildBtn = row.createEl("button", {
+          cls: "smart-notes-btn smart-notes-btn-ghost",
+          text: t("folders.buildRule"),
+        });
+        buildBtn.addEventListener("click", (ev) => {
+          ev.stopPropagation();
+          const draft: OrganizeRule = {
+            id: `rule-${Date.now()}`,
+            name: `整理到 ${node.name}`,
+            field: RuleField.Filename,
+            operator: RuleOperator.Contains,
+            pattern: node.name,
+            targetFolder: node.path,
+            enabled: true,
+          };
+          new RuleEditModal(this.app, draft, true, settings.excludedFolders, async (created) => {
+            settings.rules.push(created);
+            await this.plugin.saveSettings();
+            this.display();
+            new Notice(t("folders.ruleAdded", { name: created.name }));
+          }).open();
+        });
+
+        if (node.noteCount === 0) {
+          row.createSpan({
+            cls: "smart-notes-tree-coldstart",
+            text: t("folders.coldStart"),
+          });
+        }
+
+        if (hasChildren) {
+          const childHost = item.createDiv({ cls: "smart-notes-tree-children" });
+          if (collapseDefault) {
+            item.addClass("is-collapsed-default");
+          } else {
+            item.addClass("is-open");
+          }
+          buildLevel(node.path, childHost);
+        }
+      }
+    };
+    buildLevel("", tree);
+
+    if (nodes.length > MAX_TREE_NODES) {
+      container.createEl("p", {
+        cls: "setting-item-description",
+        text: t("folders.overflow", { n: nodes.length, shown: MAX_TREE_NODES }),
+      });
+    }
   }
 }
 

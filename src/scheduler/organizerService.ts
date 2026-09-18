@@ -115,7 +115,7 @@ export class OrganizerService {
   async organizeOne(
     file: TFile,
     mode: "auto" | "manual"
-  ): Promise<{ moved: boolean; suggestion: Suggestion | null; error?: string }> {
+  ): Promise<{ moved: boolean; suggestion: Suggestion | null; newPath?: string; error?: string }> {
     if (this.organizer.shouldIgnore(file)) {
       return { moved: false, suggestion: null };
     }
@@ -126,33 +126,81 @@ export class OrganizerService {
     }
     void degradedFrom;
     const newPath = await this.apply(file, suggestion, mode);
-    return { moved: newPath !== file.path, suggestion };
+    return { moved: newPath !== file.path, suggestion, newPath };
   }
 
-  /** 批量整理 Inbox（或全库） */
+  /** 批量整理 Inbox（或全库），返回汇总计数与逐篇明细（供整理报告展示） */
   async organizeInbox(
     mode: "auto" | "manual",
     onProgress?: (done: number, total: number, name: string) => void
-  ): Promise<{ moved: number; skipped: number; errors: string[] }> {
+  ): Promise<{
+    moved: number;
+    skipped: number;
+    errors: string[];
+    entries: BatchEntry[];
+  }> {
     const files = this.organizer.listPendingFiles();
     let moved = 0;
     let skipped = 0;
     const errors: string[] = [];
+    const entries: BatchEntry[] = [];
 
     for (let i = 0; i < files.length; i++) {
       const file = files[i];
       onProgress?.(i + 1, files.length, file.basename);
       try {
+        const from = file.path;
         const result = await this.organizeOne(file, mode);
+        entries.push({
+          file: file.basename,
+          from,
+          to: result.newPath ?? "",
+          moved: result.moved,
+          engine: result.suggestion ? EngineLevel[result.suggestion.engine] : "",
+          reason: result.error
+            ? result.error
+            : result.suggestion
+              ? result.suggestion.reason
+              : "引擎不可用",
+          confidence: result.suggestion?.confidence ?? 0,
+        });
         if (result.moved) moved++;
         else skipped++;
         if (result.error) errors.push(`${file.basename}: ${result.error}`);
       } catch (err) {
-        errors.push(`${file.basename}: ${err instanceof Error ? err.message : String(err)}`);
+        const msg = err instanceof Error ? err.message : String(err);
+        errors.push(`${file.basename}: ${msg}`);
+        entries.push({
+          file: file.basename,
+          from: file.path,
+          to: "",
+          moved: false,
+          engine: "",
+          reason: msg,
+          confidence: 0,
+        });
       }
     }
-    return { moved, skipped, errors };
+    return { moved, skipped, errors, entries };
   }
+}
+
+/** 批量整理的逐篇明细条目（整理报告数据源） */
+export interface BatchEntry {
+  /** 文件名（不含路径） */
+  file: string;
+  /** 原路径 */
+  from: string;
+  /** 新路径（未移动时为空） */
+  to: string;
+  moved: boolean;
+  /** 引擎名称（如 Rules / Tfidf），未产生建议时为空 */
+  engine: string;
+  /** 建议依据 / 保留原因 */
+  reason: string;
+  confidence: number;
+  /** 撤销状态（报告面板运行时管理） */
+  undone?: boolean;
 }
 
 /** 路径是否位于排除文件夹内 */

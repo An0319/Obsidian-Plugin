@@ -1,10 +1,51 @@
-/* Obsidian Smart Notes Organizer 插件样式 */
+/* Smart Notes Organizer - Geist 风格：hairline 边框、pill 圆角、克制过渡 */
+
+.smart-notes-settings,
+.smart-notes-report,
+.smart-notes-confirm,
+.smart-notes-edit-modal {
+  --sn-radius: 8px;
+  --sn-radius-pill: 9999px;
+  --sn-hairline: var(--background-modifier-border);
+  --sn-dur: 150ms;
+  --sn-ease: cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* ===== 通用 pill 按钮 ===== */
+.smart-notes-btn {
+  border-radius: var(--sn-radius-pill);
+  font-weight: var(--font-medium, 500);
+  transition:
+    background-color var(--sn-dur) var(--sn-ease),
+    border-color var(--sn-dur) var(--sn-ease),
+    color var(--sn-dur) var(--sn-ease),
+    box-shadow var(--sn-dur) var(--sn-ease);
+}
+
+.smart-notes-btn:focus-visible {
+  outline: 2px solid var(--background-modifier-border-focus);
+  outline-offset: 1px;
+}
+
+.smart-notes-btn-ghost {
+  background: transparent;
+  border: 1px solid var(--sn-hairline);
+  color: var(--text-muted);
+  box-shadow: none;
+}
+
+.smart-notes-btn-ghost:hover {
+  background: var(--background-modifier-hover);
+  border-color: var(--background-modifier-border-hover);
+  color: var(--text-normal);
+}
 
 /* ===== 设置面板 ===== */
 .smart-notes-settings h2 {
-  border-bottom: 1px solid var(--background-modifier-border);
-  padding-bottom: 6px;
-  margin-top: 24px;
+  border-bottom: 1px solid var(--sn-hairline);
+  padding-bottom: 8px;
+  margin-top: 28px;
+  font-size: 1.05em;
 }
 
 .smart-notes-settings h3 {
@@ -12,20 +53,77 @@
   margin-bottom: 4px;
 }
 
-/* 快速入门 */
+.smart-notes-banner {
+  border: 1px solid var(--sn-hairline);
+  border-radius: var(--sn-radius);
+  background: var(--background-secondary);
+  color: var(--text-muted);
+  padding: 10px 14px;
+  margin-bottom: 16px;
+  font-size: 0.92em;
+  line-height: 1.5;
+}
+
+/* ===== 分页导航（segmented control）===== */
+.smart-notes-tabs {
+  display: flex;
+  gap: 2px;
+  padding: 3px;
+  border-radius: var(--sn-radius-pill);
+  background: var(--background-secondary);
+  border: 1px solid var(--sn-hairline);
+  margin-bottom: 4px;
+  overflow-x: auto;
+}
+
+.smart-notes-tab {
+  flex: 1 1 0;
+  min-width: max-content;
+  border: none;
+  box-shadow: none;
+  background: transparent;
+  color: var(--text-muted);
+  border-radius: var(--sn-radius-pill);
+  padding: 5px 14px;
+  font-size: 0.9em;
+  cursor: pointer;
+  white-space: nowrap;
+  transition:
+    background-color var(--sn-dur) var(--sn-ease),
+    color var(--sn-dur) var(--sn-ease),
+    box-shadow var(--sn-dur) var(--sn-ease);
+}
+
+.smart-notes-tab:hover {
+  color: var(--text-normal);
+}
+
+.smart-notes-tab.is-active {
+  background: var(--background-primary);
+  color: var(--text-normal);
+  font-weight: var(--font-medium, 500);
+  box-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.06),
+    0 0 0 1px var(--sn-hairline);
+}
+
+.smart-notes-tab:focus-visible {
+  outline: 2px solid var(--background-modifier-border-focus);
+  outline-offset: 2px;
+}
+
+/* ===== 快速入门 ===== */
 .smart-notes-settings .smart-notes-quickstart p {
   margin: 6px 0;
   color: var(--text-muted);
+  line-height: 1.6;
 }
 
-.smart-notes-settings .smart-notes-quickstart .smart-notes-quickstart-hint {
-  color: var(--text-accent);
-}
-
-/* 规则列表行 */
+/* ===== 规则列表 ===== */
 .smart-notes-rules .setting-item {
   padding-top: 6px;
   padding-bottom: 6px;
+  border-top: 1px solid var(--sn-hairline);
 }
 
 .smart-notes-rules .setting-item-info {
@@ -34,12 +132,242 @@
 
 .smart-notes-rules .setting-item-description {
   word-break: break-all;
+  color: var(--text-muted);
 }
 
-/* 最近整理记录 */
+/* ===== 最近整理记录 ===== */
 .smart-notes-settings .smart-notes-log-line {
   font-size: 0.85em;
   margin: 2px 0;
   font-family: var(--font-monospace);
   color: var(--text-muted);
+}
+
+.smart-notes-settings .smart-notes-log-empty {
+  color: var(--text-faint);
+  font-size: 0.9em;
+  margin: 8px 0;
+}
+
+/* ===== 文件夹树 ===== */
+.smart-notes-tree {
+  font-size: 0.95em;
+}
+
+.smart-notes-tree-item {
+  border-radius: var(--sn-radius);
+}
+
+.smart-notes-tree-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  border-radius: 6px;
+  transition: background-color var(--sn-dur) var(--sn-ease);
+}
+
+.smart-notes-tree-row:hover {
+  background: var(--background-modifier-hover);
+}
+
+.smart-notes-tree-chevron {
+  width: 1em;
+  flex-shrink: 0;
+  text-align: center;
+  color: var(--text-faint);
+  cursor: pointer;
+  transition: transform var(--sn-dur) var(--sn-ease);
+}
+
+.smart-notes-tree-item.is-open > .smart-notes-tree-row .smart-notes-tree-chevron {
+  transform: rotate(90deg);
+}
+
+.smart-notes-tree-chevron.is-leaf {
+  cursor: default;
+  opacity: 0.25;
+}
+
+.smart-notes-tree-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.smart-notes-tree-row.is-expandable .smart-notes-tree-name {
+  cursor: pointer;
+}
+
+.smart-notes-tree-count {
+  color: var(--text-faint);
+  font-size: 0.85em;
+  font-variant-numeric: tabular-nums;
+  flex-shrink: 0;
+}
+
+.smart-notes-tree-coldstart {
+  color: var(--text-faint);
+  font-size: 0.82em;
+  flex-shrink: 0;
+}
+
+.smart-notes-tree-children {
+  display: none;
+  margin-left: 17px;
+  padding-left: 8px;
+  border-left: 1px solid var(--sn-hairline);
+}
+
+.smart-notes-tree-item.is-open > .smart-notes-tree-children {
+  display: block;
+}
+
+/* ===== 整理报告 ===== */
+.smart-notes-report {
+  min-width: 420px;
+}
+
+.smart-notes-report h4 {
+  color: var(--text-muted);
+  font-size: 0.78em;
+  font-weight: var(--font-medium, 500);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin: 18px 0 8px;
+}
+
+.smart-notes-report-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 12px 0 4px;
+}
+
+.smart-notes-report-section .setting-item {
+  border-top: none;
+  padding-top: 4px;
+  padding-bottom: 4px;
+}
+
+.smart-notes-report-list {
+  border-top: 1px solid var(--sn-hairline);
+}
+
+.smart-notes-report-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 6px;
+  border-bottom: 1px solid var(--sn-hairline);
+  border-radius: 4px;
+  transition: background-color var(--sn-dur) var(--sn-ease);
+}
+
+.smart-notes-report-row:hover {
+  background: var(--background-modifier-hover);
+}
+
+.smart-notes-report-row.is-undone {
+  opacity: 0.5;
+}
+
+.smart-notes-report-row.is-kept {
+  padding-top: 6px;
+  padding-bottom: 6px;
+}
+
+.smart-notes-report-row-main {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.smart-notes-report-row-title {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px;
+  font-size: 0.95em;
+}
+
+.smart-notes-report-file {
+  font-weight: var(--font-medium, 500);
+  color: var(--text-normal);
+  word-break: break-all;
+}
+
+.smart-notes-report-arrow,
+.smart-notes-report-to {
+  color: var(--text-muted);
+  word-break: break-all;
+}
+
+.smart-notes-report-row-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-top: 3px;
+  font-size: 0.85em;
+}
+
+.smart-notes-report-reason {
+  color: var(--text-faint);
+  font-size: 0.92em;
+}
+
+.smart-notes-report-row-actions {
+  flex-shrink: 0;
+}
+
+/* ===== 徽章 ===== */
+.smart-notes-badge {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid var(--sn-hairline);
+  border-radius: var(--sn-radius-pill);
+  background: var(--background-secondary);
+  color: var(--text-muted);
+  padding: 1px 8px;
+  font-size: 0.78em;
+  line-height: 1.6;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.smart-notes-badge-ok {
+  border-color: transparent;
+  background: var(--background-secondary);
+  color: var(--text-success, var(--text-accent));
+}
+
+.smart-notes-badge-muted {
+  color: var(--text-muted);
+}
+
+.smart-notes-badge-warn {
+  border-color: transparent;
+  color: var(--text-warning, var(--text-error));
+}
+
+/* ===== 确认 / 编辑弹窗 ===== */
+.smart-notes-confirm p {
+  color: var(--text-muted);
+  line-height: 1.6;
+}
+
+.smart-notes-edit-modal {
+  min-width: 420px;
+}
+
+/* ===== 动效偏好 ===== */
+@media (prefers-reduced-motion: reduce) {
+  .smart-notes-settings *,
+  .smart-notes-report *,
+  .smart-notes-confirm *,
+  .smart-notes-edit-modal * {
+    transition: none !important;
+  }
 }
