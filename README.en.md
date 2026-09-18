@@ -4,7 +4,7 @@ English | [中文](./README.md)
 
 Drop files into your Inbox, hit run, and the plugin moves each note to the folder it is semantically closest to in your vault.
 
-**In one line: smart archiving that needs no network, no waiting, and never goes offline.**
+**In one line: smart archiving that needs no network, 0 bills, and no waiting.**
 
 **Core philosophy: Behavior as Rule** — zero configuration; the plugin learns from how you have been organizing files all along.
 
