@@ -26,7 +26,7 @@ import {
   writeSampleRulesFile,
 } from "../services/customRulesLoader";
 import { ConfirmActionModal } from "../ui/batchReportModal";
-import { t, setLocale, Locale } from "../i18n";
+import { t, setLocale, Locale, I18nKey } from "../i18n";
 import SmartNotesPlugin from "../main";
 
 /** Obsidian requestUrl 适配器（跨平台无 CORS 限制），带整体超时保护 */
@@ -357,9 +357,55 @@ export class SmartNotesSettingTab extends PluginSettingTab {
     const settings = this.plugin.settings;
 
     container.createEl("h2", { text: t("quick.title") });
-    const quickStart = container.createDiv({ cls: "smart-notes-quickstart" });
-    quickStart.createEl("p", { text: t("quick.flow") });
-    quickStart.createEl("p", { text: t("quick.steps") });
+    container.createEl("p", {
+      cls: "smart-notes-quickstart-intro",
+      text: t("quick.intro"),
+    });
+
+    // 三步上手：每步独立成块，编号徽章 + 标题 + 说明
+    const steps = container.createDiv({ cls: "smart-notes-quickstart-steps" });
+    const stepDefs = [
+      { title: t("quick.step1Title"), desc: t("quick.step1Desc") },
+      { title: t("quick.step2Title"), desc: t("quick.step2Desc") },
+      { title: t("quick.step3Title"), desc: t("quick.step3Desc") },
+    ];
+    stepDefs.forEach((step, i) => {
+      const row = steps.createDiv({ cls: "smart-notes-qs-step" });
+      row.createSpan({ cls: "smart-notes-qs-step-no", text: String(i + 1) });
+      const body = row.createDiv({ cls: "smart-notes-qs-body" });
+      body.createDiv({ cls: "smart-notes-qs-step-title", text: step.title });
+      body.createDiv({ cls: "smart-notes-qs-step-desc", text: step.desc });
+    });
+
+    // 场景速查：需求 → 去哪做什么，逐行独立
+    container.createEl("h2", { text: t("quick.mapTitle") });
+    const map = container.createDiv({ cls: "smart-notes-quickstart-map" });
+    for (let i = 1; i <= 6; i++) {
+      const row = map.createDiv({ cls: "smart-notes-qs-map-row" });
+      row.createDiv({
+        cls: "smart-notes-qs-map-need",
+        text: t(`quick.map${i}Need` as I18nKey),
+      });
+      row.createDiv({
+        cls: "smart-notes-qs-map-how",
+        text: t(`quick.map${i}How` as I18nKey),
+      });
+    }
+
+    // 分页地图：四个分页各管什么
+    container.createEl("h2", { text: t("quick.pagesTitle") });
+    const pages = container.createDiv({ cls: "smart-notes-quickstart-pages" });
+    const pageDefs = [
+      { name: t("quick.pages1Name"), desc: t("quick.pages1Desc") },
+      { name: t("quick.pages2Name"), desc: t("quick.pages2Desc") },
+      { name: t("quick.pages3Name"), desc: t("quick.pages3Desc") },
+      { name: t("quick.pages4Name"), desc: t("quick.pages4Desc") },
+    ];
+    for (const p of pageDefs) {
+      const row = pages.createDiv({ cls: "smart-notes-qs-page-row" });
+      row.createSpan({ cls: "smart-notes-qs-page-name", text: p.name });
+      row.createSpan({ cls: "smart-notes-qs-page-desc", text: p.desc });
+    }
 
     container.createEl("h2", { text: t("engine.title") });
     new Setting(container)

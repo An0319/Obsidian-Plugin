@@ -14,10 +14,39 @@ export const en: Partial<Record<I18nKey, string>> = {
   "tab.general": "General",
 
   "quick.title": "Quick Start",
-  "quick.flow":
-    "How it works: drop notes into Inbox → click the ribbon icon (or rely on auto mode) → the plugin decides where each note belongs and moves it, updating all internal links. Fully local; unmatched notes stay where they are.",
-  "quick.steps":
-    "Three steps to start: 1) Confirm the Inbox folder name below; 2) Create organizing rules — start from existing folders, import the built-in rule set, or create one from scratch; 3) Try it on one note via the ribbon icon.",
+  "quick.intro":
+    "Drop notes into Inbox; the plugin decides where each belongs and moves it (or only suggests, leaving files in place). Everything runs locally. Three steps to your first run:",
+  "quick.step1Title": "Step 1 · Pick your language",
+  "quick.step1Desc":
+    "Change it at General → Interface language: System (follow Obsidian) / 中文 / English.",
+  "quick.step2Title": "Step 2 · Run your first organize",
+  "quick.step2Desc":
+    "Confirm the Inbox folder name under General → put a few unfiled notes in → press Ctrl+P, type \"Organize Inbox now\" and Enter → a report shows where each note went, why, and how confident. Click Undo to send any note back.",
+  "quick.step3Title": "Step 3 · Teach it your rules",
+  "quick.step3Desc":
+    "Rules & Folders tab: click Build rule next to any folder under \"Start from existing folders\", or import the built-in seed rules (date, meeting, template), or create one from scratch.",
+  "quick.mapTitle": "Which feature for which need",
+  "quick.map1Need": "A pile of unfiled notes to clear at once",
+  "quick.map1How": "Ctrl+P → \"Organize Inbox now\" for a batch run; the report supports undo per note or for the whole batch, so it is safe to run.",
+  "quick.map2Need": "Notes jumping around while I write, breaking my focus",
+  "quick.map2How": "General → Real-time filing → choose \"Notify only\": advice without moving files.",
+  "quick.map3Need": "Certain notes always belong in one folder",
+  "quick.map3How": "Rules & Folders → New rule: title or path containing a keyword files it automatically; list order is priority.",
+  "quick.map4Need": "Notes without obvious keywords should still land right",
+  "quick.map4How": "Intelligence tab → set Engine level to TF-IDF matching: it compares note content with each folder's existing notes.",
+  "quick.map5Need": "Stronger judgment via a local AI model",
+  "quick.map5How": "Intelligence tab → fill in the Ollama address and model, set Engine level to Local model; it falls back automatically if unreachable.",
+  "quick.map6Need": "See what the plugin moved recently",
+  "quick.map6How": "General → enable \"Keep organizing log\"; the last 200 moves appear at the bottom of that page, with one-click clear.",
+  "quick.pagesTitle": "What each tab manages",
+  "quick.pages1Name": "Quick Start",
+  "quick.pages1Desc": "This page: onboarding steps, scenario cheat-sheet and the engine level switch.",
+  "quick.pages2Name": "Rules & Folders",
+  "quick.pages2Desc": "Create/edit rules, seed rules, build rules from your folder tree, custom_rules.json sample.",
+  "quick.pages3Name": "Intelligence",
+  "quick.pages3Desc": "TF-IDF threshold, Ollama connection and test, community shared config import/export.",
+  "quick.pages4Name": "General",
+  "quick.pages4Desc": "Interface language, real-time filing modes, Inbox and exclusions, organizing log.",
   "quick.hintNoSeed":
     "The built-in rule set has not been imported — open the \"Rules & Folders\" tab and click \"Import seed rules\".",
 

@@ -15,10 +15,39 @@ export const zh = {
 
   // 快速开始
   "quick.title": "快速入门",
-  "quick.flow":
-    "工作原理：把笔记投入 Inbox → 点击左侧 Ribbon 图标（或自动监听）→ 插件判断归属并移动，内部链接自动更新。全程本地运行，不匹配的笔记保留原位。",
-  "quick.steps":
-    "首次配置三步：① 下方确认 Inbox 文件夹名与你的习惯一致；② 建立整理规则——三个起点任选：从已有文件夹一键生成、导入内置规则集、或手工新建；③ 用一篇笔记点 Ribbon 试运行。",
+  "quick.intro":
+    "把笔记放进 Inbox，插件判断归属并自动移动（也可只提醒、文件不动），全程本地完成。按下面三步跑通第一次使用：",
+  "quick.step1Title": "第 1 步 · 选好语言",
+  "quick.step1Desc":
+    "在这里改语言：「通用」分页 → 界面语言，可选 自动（跟随 Obsidian）/ 中文 / English。",
+  "quick.step2Title": "第 2 步 · 跑第一次整理",
+  "quick.step2Desc":
+    "「通用」分页确认 Inbox 文件夹名 → 把几篇待归档笔记放进去 → Ctrl+P 输入「立即整理 Inbox」回车 → 弹出整理报告单：每篇搬去了哪、依据是什么、把握多大；不满意点「撤销」送回原位。",
+  "quick.step3Title": "第 3 步 · 教它你的规矩",
+  "quick.step3Desc":
+    "「规则与文件夹」分页：在「从已有文件夹开始」点任意文件夹的「建规则」一键生成草稿；或点「导入种子规则」拿一套日期、会议、模板等现成规则；也可「新建规则」从零写。",
+  "quick.mapTitle": "什么需求，用什么功能",
+  "quick.map1Need": "攒了一批笔记没归档，想一口气清完",
+  "quick.map1How": "Ctrl+P →「立即整理 Inbox」批量整理；报告单支持逐篇或整批撤销，放心跑。",
+  "quick.map2Need": "记笔记时文件自己乱跳，打断思路",
+  "quick.map2How": "「通用」分页 → 实时归档 → 改为「只提醒」：只给建议，文件原地不动。",
+  "quick.map3Need": "某类笔记永远该进某个文件夹",
+  "quick.map3How": "「规则与文件夹」分页 → 新建规则：标题或路径包含关键词就自动归位；列表顺序即优先级。",
+  "quick.map4Need": "笔记没有明显关键词，也想归对位置",
+  "quick.map4How": "「智能引擎」分页 → 引擎层级改选 TF-IDF 相似度：按笔记内容与各文件夹已有笔记的相似程度判断。",
+  "quick.map5Need": "想接本地大模型做更强的判断",
+  "quick.map5How": "「智能引擎」分页 → 填好 Ollama 地址与模型名，引擎层级选本地大模型；连不上会自动降级回上一层。",
+  "quick.map6Need": "想知道插件最近动了哪些文件",
+  "quick.map6How": "「通用」分页 → 打开「记录整理日志」，页面底部就是最近 200 次整理记录，可一键清空。",
+  "quick.pagesTitle": "四个分页各管什么",
+  "quick.pages1Name": "快速开始",
+  "quick.pages1Desc": "本页：上手步骤、场景速查与引擎层级总开关。",
+  "quick.pages2Name": "规则与文件夹",
+  "quick.pages2Desc": "规则的增删改、种子规则、从文件夹树建规则、custom_rules.json 样例下载。",
+  "quick.pages3Name": "智能引擎",
+  "quick.pages3Desc": "TF-IDF 阈值、Ollama 连接与测试、社区共享配置导入导出。",
+  "quick.pages4Name": "通用",
+  "quick.pages4Desc": "界面语言、实时归档三档、Inbox 与排除设置、整理日志。",
   "quick.hintNoSeed":
     "尚未导入内置规则集——在「规则与文件夹」分页点击「导入种子规则」即可开始。",
 

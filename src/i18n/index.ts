@@ -2,6 +2,8 @@ import { moment } from "obsidian";
 import { zh, I18nKey } from "./zh";
 import { en } from "./en";
 
+export type { I18nKey };
+
 export type Locale = "zh" | "en" | "auto";
 
 let current: "zh" | "en" = "zh";
