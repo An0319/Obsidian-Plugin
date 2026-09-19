@@ -6,6 +6,8 @@
 .smart-notes-edit-modal {
   --sn-radius: 8px;
   --sn-radius-pill: 9999px;
+  --sn-radius-card: 10px;
+  --sn-radius-sm: 6px;
   --sn-hairline: var(--background-modifier-border);
   --sn-dur: 150ms;
   --sn-ease: cubic-bezier(0.4, 0, 0.2, 1);
@@ -112,30 +114,67 @@
   outline-offset: 2px;
 }
 
-/* ===== 快速入门 ===== */
+/* ===== 快速入门卡片（分组容器：灰面 + 发丝线 + 极轻投影）===== */
+.smart-notes-qs-card {
+  background: var(--background-secondary);
+  border: 1px solid var(--sn-hairline);
+  border-radius: var(--sn-radius-card);
+  padding: 12px 16px 10px;
+  margin-bottom: 16px;
+  box-shadow: var(--shadow-s, 0 1px 2px rgba(0, 0, 0, 0.05));
+}
+
+.smart-notes-qs-card-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--sn-hairline);
+  margin-bottom: 4px;
+}
+
+.smart-notes-qs-card-mark {
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  background: var(--interactive-accent);
+  flex-shrink: 0;
+}
+
+.smart-notes-qs-card-title {
+  font-weight: var(--font-semibold, 600);
+  color: var(--text-normal);
+}
+
 .smart-notes-settings .smart-notes-quickstart-intro {
   color: var(--text-muted);
   line-height: 1.6;
-  margin: 6px 0 4px;
+  margin: 6px 0 14px;
 }
 
 .smart-notes-qs-step {
   display: flex;
   align-items: flex-start;
   gap: 10px;
-  padding: 8px 0;
+  padding: 9px 0;
+}
+
+.smart-notes-qs-step + .smart-notes-qs-step,
+.smart-notes-qs-map-row + .smart-notes-qs-map-row {
+  border-top: 1px solid var(--sn-hairline);
 }
 
 .smart-notes-qs-step-no {
   width: 22px;
   height: 22px;
   border-radius: var(--sn-radius-pill);
-  border: 1px solid var(--sn-hairline);
+  background: var(--interactive-accent);
+  color: var(--text-on-accent);
   display: inline-flex;
   align-items: center;
   justify-content: center;
   font-size: 0.8em;
-  color: var(--text-muted);
+  font-weight: var(--font-medium, 500);
   flex-shrink: 0;
   font-variant-numeric: tabular-nums;
   margin-top: 1px;
@@ -153,12 +192,7 @@
 }
 
 .smart-notes-qs-map-row {
-  padding: 8px 0;
-  border-bottom: 1px solid var(--sn-hairline);
-}
-
-.smart-notes-qs-map-row:last-child {
-  border-bottom: none;
+  padding: 9px 0;
 }
 
 .smart-notes-qs-map-need {
@@ -175,20 +209,32 @@
 
 .smart-notes-qs-page-row {
   display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: 4px 8px;
-  padding: 6px 0;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 0;
   font-size: 0.93em;
 }
 
+.smart-notes-qs-page-row + .smart-notes-qs-page-row {
+  border-top: 1px solid var(--sn-hairline);
+}
+
+/* 键帽：灰卡上浮白块，与顶部导航 active 片段同语法 */
 .smart-notes-qs-page-name {
+  background: var(--background-primary);
+  border: 1px solid var(--sn-hairline);
+  border-radius: var(--sn-radius-sm);
+  padding: 1px 8px;
+  font-size: 0.85em;
   font-weight: var(--font-medium, 500);
+  color: var(--text-normal);
   flex-shrink: 0;
+  white-space: nowrap;
 }
 
 .smart-notes-qs-page-desc {
   color: var(--text-muted);
+  min-width: 0;
 }
 
 /* ===== 规则列表 ===== */

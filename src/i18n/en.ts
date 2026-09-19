@@ -23,6 +23,7 @@ export const en: Partial<Record<I18nKey, string>> = {
   "quick.step2Desc":
     "Confirm the Inbox folder name under General → put a few unfiled notes in → press Ctrl+P, type \"Organize Inbox now\" and Enter → a report shows where each note went, why, and how confident. Click Undo to send any note back.",
   "quick.step3Title": "Step 3 · Teach it your rules",
+  "quick.stepsTitle": "Three steps",
   "quick.step3Desc":
     "Rules & Folders tab: click Build rule next to any folder under \"Start from existing folders\", or import the built-in seed rules (date, meeting, template), or create one from scratch.",
   "quick.mapTitle": "Which feature for which need",

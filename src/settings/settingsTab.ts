@@ -332,6 +332,15 @@ export class SmartNotesSettingTab extends PluginSettingTab {
     }
   }
 
+  /** 快速入门分组卡片：强调色标记 + 标题的卡头，返回内容宿主 */
+  private renderQuickCard(container: HTMLElement, title: string): HTMLElement {
+    const card = container.createDiv({ cls: "smart-notes-qs-card" });
+    const head = card.createDiv({ cls: "smart-notes-qs-card-head" });
+    head.createSpan({ cls: "smart-notes-qs-card-mark" });
+    head.createSpan({ cls: "smart-notes-qs-card-title", text: title });
+    return card.createDiv({ cls: "smart-notes-qs-card-body" });
+  }
+
   private normalizeTab(value: string): SettingsTabId {
     return (TAB_IDS as string[]).includes(value) ? (value as SettingsTabId) : "quickstart";
   }
@@ -362,26 +371,25 @@ export class SmartNotesSettingTab extends PluginSettingTab {
       text: t("quick.intro"),
     });
 
-    // 三步上手：每步独立成块，编号徽章 + 标题 + 说明
-    const steps = container.createDiv({ cls: "smart-notes-quickstart-steps" });
+    // 卡一：三步上手（实心编号圆 + 标题 + 说明）
+    const stepsHost = this.renderQuickCard(container, t("quick.stepsTitle"));
     const stepDefs = [
       { title: t("quick.step1Title"), desc: t("quick.step1Desc") },
       { title: t("quick.step2Title"), desc: t("quick.step2Desc") },
       { title: t("quick.step3Title"), desc: t("quick.step3Desc") },
     ];
     stepDefs.forEach((step, i) => {
-      const row = steps.createDiv({ cls: "smart-notes-qs-step" });
+      const row = stepsHost.createDiv({ cls: "smart-notes-qs-step" });
       row.createSpan({ cls: "smart-notes-qs-step-no", text: String(i + 1) });
       const body = row.createDiv({ cls: "smart-notes-qs-body" });
       body.createDiv({ cls: "smart-notes-qs-step-title", text: step.title });
       body.createDiv({ cls: "smart-notes-qs-step-desc", text: step.desc });
     });
 
-    // 场景速查：需求 → 去哪做什么，逐行独立
-    container.createEl("h2", { text: t("quick.mapTitle") });
-    const map = container.createDiv({ cls: "smart-notes-quickstart-map" });
+    // 卡二：场景速查（需求 → 去哪做什么，逐行独立）
+    const mapHost = this.renderQuickCard(container, t("quick.mapTitle"));
     for (let i = 1; i <= 6; i++) {
-      const row = map.createDiv({ cls: "smart-notes-qs-map-row" });
+      const row = mapHost.createDiv({ cls: "smart-notes-qs-map-row" });
       row.createDiv({
         cls: "smart-notes-qs-map-need",
         text: t(`quick.map${i}Need` as I18nKey),
@@ -392,9 +400,8 @@ export class SmartNotesSettingTab extends PluginSettingTab {
       });
     }
 
-    // 分页地图：四个分页各管什么
-    container.createEl("h2", { text: t("quick.pagesTitle") });
-    const pages = container.createDiv({ cls: "smart-notes-quickstart-pages" });
+    // 卡三：分页地图（键帽页名 + 说明）
+    const pagesHost = this.renderQuickCard(container, t("quick.pagesTitle"));
     const pageDefs = [
       { name: t("quick.pages1Name"), desc: t("quick.pages1Desc") },
       { name: t("quick.pages2Name"), desc: t("quick.pages2Desc") },
@@ -402,7 +409,7 @@ export class SmartNotesSettingTab extends PluginSettingTab {
       { name: t("quick.pages4Name"), desc: t("quick.pages4Desc") },
     ];
     for (const p of pageDefs) {
-      const row = pages.createDiv({ cls: "smart-notes-qs-page-row" });
+      const row = pagesHost.createDiv({ cls: "smart-notes-qs-page-row" });
       row.createSpan({ cls: "smart-notes-qs-page-name", text: p.name });
       row.createSpan({ cls: "smart-notes-qs-page-desc", text: p.desc });
     }
