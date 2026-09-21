@@ -44,10 +44,23 @@
 
 /* ===== 设置面板 ===== */
 .smart-notes-settings h2 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   border-bottom: 1px solid var(--sn-hairline);
   padding-bottom: 8px;
   margin-top: 28px;
   font-size: 1.05em;
+  font-weight: var(--font-semibold, 600);
+}
+
+.smart-notes-settings h2::before {
+  content: "";
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  background: var(--interactive-accent);
+  flex-shrink: 0;
 }
 
 .smart-notes-settings h3 {
@@ -114,8 +127,9 @@
   outline-offset: 2px;
 }
 
-/* ===== 快速入门卡片（分组容器：灰面 + 发丝线 + 极轻投影）===== */
-.smart-notes-qs-card {
+/* ===== 分组卡片（灰面 + 发丝线 + 极轻投影；有头卡与无头卡共用一套 token）===== */
+.smart-notes-qs-card,
+.smart-notes-card {
   background: var(--background-secondary);
   border: 1px solid var(--sn-hairline);
   border-radius: var(--sn-radius-card);
@@ -237,10 +251,13 @@
   min-width: 0;
 }
 
-/* ===== 规则列表 ===== */
+/* ===== 规则列表（装箱后：卡头分隔线接管首行，行间用兄弟选择器画线）===== */
 .smart-notes-rules .setting-item {
   padding-top: 6px;
   padding-bottom: 6px;
+}
+
+.smart-notes-rules .setting-item + .setting-item {
   border-top: 1px solid var(--sn-hairline);
 }
 

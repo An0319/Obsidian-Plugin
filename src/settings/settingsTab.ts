@@ -830,13 +830,15 @@ export class SmartNotesSettingTab extends PluginSettingTab {
           new Notice(t("log.cleared"));
         })
       );
+    // 日志装箱：先建宿主卡，异步读取后再填充，等宽行有了边界
+    const logCard = container.createDiv({ cls: "smart-notes-card" });
     void log.read().then((entries) => {
       if (entries.length === 0) {
-        container.createEl("p", { cls: "smart-notes-log-empty", text: t("log.empty") });
+        logCard.createEl("p", { cls: "smart-notes-log-empty", text: t("log.empty") });
         return;
       }
       for (const entry of entries.slice(0, 20)) {
-        container.createEl("p", {
+        logCard.createEl("p", {
           text: `${entry.time.slice(0, 16).replace("T", " ")}  ${entry.file}: ${entry.from || "/"} -> ${entry.to}  [${entry.engine}]`,
           cls: "smart-notes-log-line",
         });
@@ -844,10 +846,10 @@ export class SmartNotesSettingTab extends PluginSettingTab {
     });
   }
 
-  /** 渲染规则列表（按顺序即优先级，支持上下移动 / 启停 / 删除） */
+  /** 渲染规则列表（按顺序即优先级，支持上下移动 / 启停 / 删除；整体装箱） */
   private renderRules(container: HTMLElement): void {
     const settings = this.plugin.settings;
-    const wrap = container.createDiv({ cls: "smart-notes-rules" });
+    const wrap = container.createDiv({ cls: "smart-notes-card smart-notes-rules" });
     settings.rules.forEach((rule, index) => {
       const setting = new Setting(wrap)
         .setName(`${index + 1}. ${rule.name}`)
@@ -944,7 +946,8 @@ export class SmartNotesSettingTab extends PluginSettingTab {
       byParent.set(parent, list);
     }
 
-    const tree = container.createDiv({ cls: "smart-notes-tree" });
+    const treeCard = container.createDiv({ cls: "smart-notes-card" });
+    const tree = treeCard.createDiv({ cls: "smart-notes-tree" });
     const buildLevel = (parentPath: string, host: HTMLElement) => {
       for (const node of byParent.get(parentPath) ?? []) {
         const children = byParent.get(node.path) ?? [];
