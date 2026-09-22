@@ -8,7 +8,8 @@
     "dev": "node esbuild.config.mjs",
     "build": "tsc -noEmit -skipLibCheck && node esbuild.config.mjs production",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "eval:tfidf": "esbuild scripts/eval-tfidf.ts --bundle --platform=node --outfile=node_modules/.cache/eval-tfidf.js --log-level=error && node node_modules/.cache/eval-tfidf.js"
   },
   "keywords": [
     "obsidian",

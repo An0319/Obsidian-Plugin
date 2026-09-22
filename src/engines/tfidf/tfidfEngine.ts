@@ -47,15 +47,24 @@ export class TfidfEngine implements IOrganizeEngine {
   private cacheSignature = "";
   private cacheTime = 0;
 
+  /** 过滤显式传入的 undefined，防止击穿 DEFAULT_OPTIONS */
+  private cleanOptions(
+    options: Partial<TfidfEngineOptions>
+  ): Partial<TfidfEngineOptions> {
+    return Object.fromEntries(
+      Object.entries(options).filter(([, v]) => v !== undefined)
+    ) as Partial<TfidfEngineOptions>;
+  }
+
   constructor(
     private provider: SnapshotProvider,
     options: Partial<TfidfEngineOptions> = {}
   ) {
-    this.options = { ...DEFAULT_OPTIONS, ...options };
+    this.options = { ...DEFAULT_OPTIONS, ...this.cleanOptions(options) };
   }
 
   setOptions(options: Partial<TfidfEngineOptions>): void {
-    this.options = { ...this.options, ...options };
+    this.options = { ...this.options, ...this.cleanOptions(options) };
     this.invalidateCache();
   }
 
@@ -165,17 +174,29 @@ export class TfidfEngine implements IOrganizeEngine {
     this.cacheTime = Date.now();
   }
 
-  /** 限制参与计算的笔记数量（保留最新的笔记） */
+  /**
+   * 限制参与计算的笔记数量：按文件夹规模比例分配名额（最大余数法），
+   * 避免全局预算被遍历序靠前的大文件夹吞掉导致后续文件夹失语。
+   * 各文件夹内部保留最新的笔记。
+   */
   private limitNotes(snapshots: FolderSnapshot[]): FolderSnapshot[] {
-    let budget = this.options.maxNotes;
+    const total = snapshots.reduce((s, f) => s + f.notes.length, 0);
+    if (total <= this.options.maxNotes) return snapshots;
+    const budget = this.options.maxNotes;
+    const quotas = snapshots.map((f) => (f.notes.length * budget) / total);
+    const base = quotas.map((q) => Math.floor(q));
+    const remainder = budget - base.reduce((s, v) => s + v, 0);
+    const order = quotas
+      .map((q, i) => ({ i, frac: q - Math.floor(q) }))
+      .sort((a, b) => b.frac - a.frac || a.i - b.i);
+    for (let k = 0; k < remainder; k++) base[order[k].i] += 1;
     const result: FolderSnapshot[] = [];
-    for (const snap of snapshots) {
-      if (budget <= 0) break;
-      const notes = [...snap.notes]
+    for (let i = 0; i < snapshots.length; i++) {
+      if (base[i] <= 0) continue;
+      const notes = [...snapshots[i].notes]
         .sort((a, b) => b.mtime - a.mtime)
-        .slice(0, budget);
-      budget -= notes.length;
-      result.push({ folder: snap.folder, notes });
+        .slice(0, base[i]);
+      result.push({ folder: snapshots[i].folder, notes });
     }
     return result;
   }

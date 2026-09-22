@@ -65,6 +65,72 @@ describe("EngineDispatcher 降级逻辑", () => {
     expect(error).toBeUndefined();
   });
 
+  it("智能引擎弃权时继续尝试规则兜底", async () => {
+    const dispatcher = new EngineDispatcher();
+    dispatcher.register(
+      stubEngine(EngineLevel.Tfidf, () =>
+        Promise.resolve({
+          suggestedPath: "",
+          confidence: 0.2,
+          reason: "最高相似度 20% 低于阈值 30%",
+          engine: EngineLevel.Tfidf,
+        })
+      )
+    );
+    dispatcher.register(
+      stubEngine(EngineLevel.Rules, () =>
+        Promise.resolve({
+          suggestedPath: "日志",
+          confidence: 1,
+          reason: "命中规则「日志归位」",
+          engine: EngineLevel.Rules,
+        })
+      )
+    );
+    const { suggestion, degradedFrom, error } = await dispatcher.analyzeWithFallback(
+      "t",
+      "c",
+      "p",
+      EngineLevel.Tfidf
+    );
+    expect(suggestion?.suggestedPath).toBe("日志");
+    expect(degradedFrom).toBe(EngineLevel.Tfidf);
+    expect(error).toBeUndefined();
+  });
+
+  it("全部引擎弃权时保留最智能引擎的空建议与理由", async () => {
+    const dispatcher = new EngineDispatcher();
+    dispatcher.register(
+      stubEngine(EngineLevel.Tfidf, () =>
+        Promise.resolve({
+          suggestedPath: "",
+          confidence: 0.2,
+          reason: "最高相似度 20% 低于阈值 30%",
+          engine: EngineLevel.Tfidf,
+        })
+      )
+    );
+    dispatcher.register(
+      stubEngine(EngineLevel.Rules, () =>
+        Promise.resolve({
+          suggestedPath: "",
+          confidence: 0,
+          reason: "没有命中任何规则",
+          engine: EngineLevel.Rules,
+        })
+      )
+    );
+    const { suggestion, error } = await dispatcher.analyzeWithFallback(
+      "t",
+      "c",
+      "p",
+      EngineLevel.Tfidf
+    );
+    expect(suggestion?.suggestedPath).toBe("");
+    expect(suggestion?.reason).toBe("最高相似度 20% 低于阈值 30%");
+    expect(error).toBeUndefined();
+  });
+
   it("所有引擎失败返回 null 与错误信息", async () => {
     const dispatcher = new EngineDispatcher();
     dispatcher.register(

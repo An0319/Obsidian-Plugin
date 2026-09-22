@@ -32,7 +32,8 @@ export class EngineDispatcher {
 
   /**
    * 使用指定层级引擎分析；失败时按层级自动降级。
-   * 返回 null 表示所有引擎都无法给出建议。
+   * 引擎返回空建议（suggestedPath 为空）视为弃权，继续尝试下一层；
+   * 全部弃权时返回最智能引擎的空建议（保留其理由），全部异常时返回 null。
    */
   async analyzeWithFallback(
     title: string,
@@ -42,17 +43,21 @@ export class EngineDispatcher {
     mtime?: number
   ): Promise<{ suggestion: Suggestion | null; degradedFrom?: EngineLevel; error?: string }> {
     let lastError = "";
+    let emptyResult: Suggestion | null = null;
     for (const lvl of this.fallbackChain(level)) {
       const engine = this.engines.get(lvl);
       if (!engine) continue;
       try {
         const suggestion = await engine.analyze(title, content, filePath, mtime);
-        return {
-          suggestion,
-          degradedFrom:
-            lvl !== level && suggestion.confidence > 0 ? level : undefined,
-          error: undefined,
-        };
+        if (suggestion.suggestedPath) {
+          return {
+            suggestion,
+            degradedFrom:
+              lvl !== level && suggestion.confidence > 0 ? level : undefined,
+            error: undefined,
+          };
+        }
+        emptyResult ??= suggestion;
       } catch (err) {
         // 层级三不可用时降级；其他引擎异常也记录并继续降级
         lastError =
@@ -65,6 +70,7 @@ export class EngineDispatcher {
         }
       }
     }
+    if (emptyResult) return { suggestion: emptyResult, error: undefined };
     return { suggestion: null, error: lastError };
   }
 }
