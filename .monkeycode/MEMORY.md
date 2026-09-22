@@ -58,3 +58,14 @@ Entries discovered by the Agent during task execution should follow this format:
   - vitest.config.ts 已配置 resolve.alias：obsidian → tests/mocks/obsidian.ts
   - 桩内提供可配置的 moment.locale()（setMockLocale），供 resolveLocale("auto") 跟随逻辑测试
   - 新增涉及 obsidian 运行时 API 的测试一律走该别名，直接 import 会 ERR_MODULE_NOT_FOUND
+
+[TF-IDF 离线评测 harness 与黄金阈值区间]
+- Date: 2026-09-22
+- Context: V0.3.4 实施 TF-IDF 鲁棒性修复与三层检验方案时建立
+- Category: Build Methods
+- Instructions:
+  - 评测命令：npm run eval:tfidf（esbuild 打包 scripts/eval-tfidf.ts 到 node_modules/.cache 后用 node 运行，不依赖 Obsidian）
+  - 方法：合成 6 领域语料（mulberry32 种子 20260922 可复现）+ 留出法 + 阈值 0.10-0.90 扫描
+  - 实测结论：阈值 0.15-0.35 为黄金区间（域内准确率 100% + 域外 100% 正确拒绝）；默认 0.3 在区间右缘；0.10 以下域外误投 95%；0.40 起准确率衰减
+  - 单篇分析约 0.09ms、180 篇语料构建约 7ms，计算性能有大量余量
+  - 降级链语义（0.3.4 起）：引擎返回空建议视为弃权并继续尝试下一层（规则兜底生效）；全部弃权时返回最智能引擎的空建议保留理由
