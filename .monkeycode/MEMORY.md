@@ -44,11 +44,20 @@ Entries discovered by the Agent during task execution should follow this format:
 - Category: Build Methods
 - Instructions:
   - 构建命令：npm run build（tsc 类型检查 + esbuild 压缩产出 main.js）
-  - 测试命令：npm test（Vitest，6 个文件 56 个用例）
+  - 测试命令：npm test（Vitest，14 个文件 187 个用例，截至 0.3.5）
   - npm install/build/test 必须使用 background_terminal_create 执行（环境内存约 7965MB）
   - main.js 为构建产物，当前被 git 跟踪且随 main 分支提交（.gitignore 无排除条目）；正式 Release 资产由 GitHub Actions 分发，V0.3 上架前建议取消跟踪并补 .gitignore（需用户确认，涉及 git rm --cached）
   - 本仓库托管在 GitHub（An0319/Obsidian-Plugin），push options 的 merge_request.create 为 GitLab 语法，GitHub 上无效；PR 需 gh CLI（未认证）或用户手动创建
   - 推送后必须用 git ls-remote 比对本地与远程 hash 确认推送成功（曾遇 HTTP 500 瞬时失败，重试即可）
+
+[Release Tag 命名：无 v 前缀]
+- Date: 2026-09-24
+- Context: 0.3.5 发版时误打 v0.3.5 tag，GitHub Actions「Verify tag matches manifest version」失败
+- Category: Build Methods
+- Instructions:
+  - 发版 tag 必须与 manifest.json 版本号完全一致、无 v 前缀（0.1.0 ~ 0.3.5 均如此）
+  - 工作流校验逻辑：refs/tags/{manifest.version} 必须等于触发 tag 的 github.ref，v 前缀会导致 exit 1
+  - Release 验证方式：expanded_assets HTML 页（API 匿名会限流）确认 main.js/manifest.json/styles.css 三资产
 
 [测试中 obsidian 模块需经桩替换]
 - Date: 2026-09-18
