@@ -150,10 +150,10 @@ export const zh = {
   "tfidf.thresholdDesc": "当前 {pct}%，低于该值时建议保留原位",
   "tfidf.maxNotes": "参与计算的笔记上限",
   "tfidf.maxNotesDesc": "每文件夹按最新优先截取，避免大库卡顿",
-  "tfidf.rebuild": "重建特征缓存",
-  "tfidf.rebuildDesc": "文件夹内容变更会自动重算，也可手动触发",
-  "tfidf.rebuildButton": "重建",
-  "tfidf.rebuildDone": "文件夹特征已重建",
+  "tfidf.rebuild": "立即学习",
+  "tfidf.rebuildDesc": "基于当前笔记内容重建文件夹特征；平时内容变更也会自动重算",
+  "tfidf.rebuildButton": "学习",
+  "tfidf.rebuildDone": "学习完成：{folders} 个文件夹 / {notes} 篇笔记，用时 {ms}ms",
 
   // 层级三
   "ollama.title": "层级三：本地大模型（Ollama）",
@@ -194,12 +194,25 @@ export const zh = {
   "general.auto.off": "关闭",
   "general.auto.notify": "只提醒（文件不动）",
   "general.auto.move": "直接归档（静默移动）",
+  "general.autoPanelTitle": "实时归档",
+  "general.moveRisk": "移动模式：文件会被自动移出 Inbox",
+  "general.delay": "静默期",
+  "general.delayDesc":
+    "笔记安静多久后才处理；期间继续编辑或重命名会顺延计时。三项都为 0 表示立即处理",
+  "general.delayH": "时",
+  "general.delayM": "分",
+  "general.delayS": "秒",
+  "general.delayPreset": "套用预设",
+  "general.excluded": "排除文件夹",
+  "general.excludedDesc": "这些文件夹及其子目录不参与整理与特征计算",
+  "general.excludedEmpty": "尚未排除任何文件夹",
+  "general.excludedRemove": "移除该排除项",
+  "general.excludedAddBtn": "添加",
+  "general.excludedPlaceholder": "输入或从建议中选择文件夹路径",
   "general.inbox": "Inbox 文件夹名",
   "general.inboxDesc": "自动整理只处理该文件夹内的新笔记；留空则处理全库",
   "general.unclassified": "未归类文件夹",
   "general.unclassifiedDesc": "所有引擎均无建议时的兜底目标；留空则保留原位",
-  "general.excluded": "排除文件夹",
-  "general.excludedDesc": "逗号分隔，这些文件夹及其子目录不参与整理与特征计算",
   "general.locale": "界面语言",
   "general.localeDesc": "设置面板、通知与命令的语言",
   "general.locale.auto": "跟随系统",
@@ -259,12 +272,14 @@ export const zh = {
   "notify.inboxErrors": "，失败 {n} 篇（详见整理报告）",
   "notify.inboxStart": "开始整理…",
   "notify.inboxProgress": "整理中 {done}/{total}：{name}",
+  "notify.delayedMoved": "静默期结束：已自动归档 {n} 篇笔记",
+  "notify.delayedSuggestions": "静默期结束：{n} 条建议\n{list}",
 
   // 命令
   "cmd.organizeCurrent": "整理当前笔记",
   "cmd.previewSuggestion": "预览当前笔记的整理建议",
   "cmd.organizeInbox": "立即整理 Inbox",
-  "cmd.rebuildCache": "重建层级二特征缓存",
+  "cmd.rebuildCache": "立即学习（重建特征索引）",
 } as const;
 
 export type I18nKey = keyof typeof zh;

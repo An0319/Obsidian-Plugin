@@ -593,9 +593,8 @@ export class SmartNotesSettingTab extends PluginSettingTab {
       .setDesc(t("tfidf.rebuildDesc"))
       .addButton((b) =>
         b.setButtonText(t("tfidf.rebuildButton")).onClick(async () => {
-          this.plugin.tfidfEngine.invalidateCache();
-          await this.plugin.tfidfEngine.initialize();
-          new Notice(t("tfidf.rebuildDone"));
+          const stats = await this.plugin.tfidfEngine.learn();
+          new Notice(t("tfidf.rebuildDone", stats));
         })
       );
 
@@ -728,7 +727,19 @@ export class SmartNotesSettingTab extends PluginSettingTab {
       cls: "setting-item-description",
       text: t("general.desc"),
     });
-    new Setting(container)
+
+    // 实时归档装箱进紫色面板：自动化专属区；移动模式叠加琥珀风险徽标
+    const panel = container.createDiv({ cls: "smart-notes-auto-panel" });
+    const head = panel.createDiv({ cls: "smart-notes-auto-panel-head" });
+    head.createSpan({ cls: "smart-notes-auto-panel-title", text: t("general.autoPanelTitle") });
+    if (settings.autoOrganizeMode === AutoOrganizeMode.Move) {
+      head.createSpan({
+        cls: "smart-notes-badge smart-notes-badge-amber",
+        text: t("general.moveRisk"),
+      });
+    }
+
+    new Setting(panel)
       .setName(t("general.autoMode"))
       .setDesc(t("general.autoModeDesc"))
       .addDropdown((d) =>
@@ -742,8 +753,62 @@ export class SmartNotesSettingTab extends PluginSettingTab {
           .onChange(async (v) => {
             settings.autoOrganizeMode = Number(v) as AutoOrganizeMode;
             await this.plugin.saveSettings();
+            this.display();
           })
       );
+
+    // 静默期三框（时/分/秒）：全 0 = 立即（原行为）；手动整理不受影响
+    if (settings.autoOrganizeMode !== AutoOrganizeMode.Off) {
+      const delaySetting = new Setting(panel)
+        .setName(t("general.delay"))
+        .setDesc(t("general.delayDesc"));
+      const clamp = (v: string, max: number) => {
+        const n = parseInt(v, 10);
+        return Number.isFinite(n) && n > 0 ? Math.min(n, max) : 0;
+      };
+      let h = String(Math.floor(settings.autoOrganizeDelaySec / 3600));
+      let m = String(Math.floor((settings.autoOrganizeDelaySec % 3600) / 60));
+      let s = String(settings.autoOrganizeDelaySec % 60);
+      const applyDelay = async () => {
+        settings.autoOrganizeDelaySec = clamp(h, 24) * 3600 + clamp(m, 59) * 60 + clamp(s, 59);
+        await this.plugin.saveSettings();
+      };
+      delaySetting.addText((tx) =>
+        tx.setValue(h).setPlaceholder(t("general.delayH")).onChange((v) => {
+          h = v;
+          void applyDelay();
+        })
+      );
+      delaySetting.addText((tx) =>
+        tx.setValue(m).setPlaceholder(t("general.delayM")).onChange((v) => {
+          m = v;
+          void applyDelay();
+        })
+      );
+      delaySetting.addText((tx) =>
+        tx.setValue(s).setPlaceholder(t("general.delayS")).onChange((v) => {
+          s = v;
+          void applyDelay();
+        })
+      );
+      for (const preset of [
+        { label: "30s", sec: 30 },
+        { label: "2m", sec: 120 },
+        { label: "10m", sec: 600 },
+      ]) {
+        delaySetting.addButton((b) =>
+          b
+            .setButtonText(preset.label)
+            .setTooltip(t("general.delayPreset"))
+            .onClick(async () => {
+              settings.autoOrganizeDelaySec = preset.sec;
+              await this.plugin.saveSettings();
+              this.display();
+            })
+        );
+      }
+    }
+
     new Setting(container)
       .setName(t("general.inbox"))
       .setDesc(t("general.inboxDesc"))
@@ -762,17 +827,55 @@ export class SmartNotesSettingTab extends PluginSettingTab {
           await this.plugin.saveSettings();
         })
       );
-    new Setting(container)
+    // 排除文件夹：可视化列表 + 文件夹建议输入（替代旧版手输逗号分隔）
+    const excludedSetting = new Setting(container)
       .setName(t("general.excluded"))
-      .setDesc(t("general.excludedDesc"))
-      .addText((tx) =>
-        tx
-          .setValue(settings.excludedFolders.join(", "))
-          .onChange(async (v) => {
-            settings.excludedFolders = v.split(",").map((s) => s.trim()).filter(Boolean);
-            await this.plugin.saveSettings();
-          })
-      );
+      .setDesc(t("general.excludedDesc"));
+    const excludedWrap = excludedSetting.controlEl.createDiv({ cls: "smart-notes-excluded" });
+    if (settings.excludedFolders.length === 0) {
+      excludedWrap.createDiv({
+        cls: "smart-notes-excluded-empty",
+        text: t("general.excludedEmpty"),
+      });
+    }
+    for (const folder of [...settings.excludedFolders].sort()) {
+      const chip = excludedWrap.createDiv({ cls: "smart-notes-excluded-chip" });
+      chip.createSpan({ cls: "smart-notes-excluded-chip-path", text: folder });
+      const removeBtn = chip.createEl("button", {
+        cls: "smart-notes-excluded-chip-remove",
+        attr: { "aria-label": t("general.excludedRemove") },
+      });
+      removeBtn.setText("×");
+      removeBtn.addEventListener("click", async () => {
+        settings.excludedFolders = settings.excludedFolders.filter((f) => f !== folder);
+        await this.plugin.saveSettings();
+        this.display();
+      });
+    }
+    const addRow = excludedWrap.createDiv({ cls: "smart-notes-excluded-add" });
+    const addInput = addRow.createEl("input", {
+      cls: "smart-notes-excluded-add-input",
+      attr: { type: "text", placeholder: t("general.excludedPlaceholder") },
+    });
+    const commitAdd = async (raw?: string) => {
+      const path = (raw ?? addInput.value).trim().replace(/\/+$/, "");
+      if (path === "" || settings.excludedFolders.includes(path)) return;
+      settings.excludedFolders = [...settings.excludedFolders, path].sort();
+      await this.plugin.saveSettings();
+      this.display();
+    };
+    addInput.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") void commitAdd();
+    });
+    const addBtn = addRow.createEl("button", { cls: "smart-notes-excluded-add-btn" });
+    addBtn.setText(t("general.excludedAddBtn"));
+    addBtn.addEventListener("click", () => void commitAdd());
+    new FolderInputSuggest(
+      this.app,
+      addInput,
+      (path) => void commitAdd(path),
+      settings.excludedFolders
+    );
     new Setting(container)
       .setName(t("general.locale"))
       .setDesc(t("general.localeDesc"))

@@ -34,6 +34,10 @@ export interface SmartNotesSettings {
   // ---- 通用设置 ----
   /** 实时归档模式（旧 autoOrganize 布尔值迁移后移除） */
   autoOrganizeMode: AutoOrganizeMode;
+  /** 实时归档静默期（秒）：笔记静默满此时长才评估归档；0 = 立即（原行为） */
+  autoOrganizeDelaySec: number;
+  /** 静默期队列：路径 -> 最后活动时间（ms），延迟模式下持久化以便重启恢复计时 */
+  delayQueue: Record<string, number>;
   /** 界面语言 */
   locale: "zh" | "en" | "auto";
   /** 设置面板上次停留的分页 */
@@ -68,6 +72,8 @@ export const DEFAULT_SETTINGS: SmartNotesSettings = {
   sharedConfigOverlay: false,
 
   autoOrganizeMode: AutoOrganizeMode.Move,
+  autoOrganizeDelaySec: 0,
+  delayQueue: {},
   locale: "auto",
   lastSettingsTab: "quickstart",
   inboxFolder: "Inbox",
@@ -110,6 +116,26 @@ export function migrateSettings(raw: unknown): SmartNotesSettings {
   }
   if (typeof merged.legacySeedMigrated !== "boolean") {
     merged.legacySeedMigrated = false;
+  }
+  // 静默期：非法值回落 0（立即）；范围钳制 0~86400 秒（一天）
+  if (typeof merged.autoOrganizeDelaySec !== "number" || !Number.isFinite(merged.autoOrganizeDelaySec)) {
+    merged.autoOrganizeDelaySec = 0;
+  }
+  merged.autoOrganizeDelaySec = Math.min(
+    86400,
+    Math.max(0, Math.round(merged.autoOrganizeDelaySec))
+  );
+  if (
+    typeof merged.delayQueue !== "object" ||
+    merged.delayQueue === null ||
+    Array.isArray(merged.delayQueue)
+  ) {
+    merged.delayQueue = {};
+  }
+  for (const key of Object.keys(merged.delayQueue)) {
+    if (typeof merged.delayQueue[key] !== "number" || !Number.isFinite(merged.delayQueue[key])) {
+      delete merged.delayQueue[key];
+    }
   }
   return merged;
 }

@@ -75,6 +75,22 @@ export class TfidfEngine implements IOrganizeEngine {
   }
 
   /**
+   * 立即学习：强制重建索引并回报学习规模与耗时。
+   * 引擎本身在每次分析时隐式学习（TTL 过期自动重建），该方法提供
+   * 显式的学习入口与可见的反馈（文件夹数 / 笔记数 / 耗时）。
+   */
+  async learn(): Promise<{ folders: number; notes: number; ms: number }> {
+    const start = Date.now();
+    this.invalidateCache();
+    await this.ensureCache();
+    return {
+      folders: this.cache.length,
+      notes: this.cache.reduce((sum, fv) => sum + fv.docCount, 0),
+      ms: Date.now() - start,
+    };
+  }
+
+  /**
    * 基于文件夹快照构建全部文件夹向量（纯计算，供缓存刷新与配置导出复用）
    */
   buildVectors(snapshots: FolderSnapshot[]): {

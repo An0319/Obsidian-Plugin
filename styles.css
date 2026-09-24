@@ -487,6 +487,88 @@
   color: var(--text-warning, var(--text-error));
 }
 
+.smart-notes-badge-amber {
+  border-color: transparent;
+  background: color-mix(in srgb, var(--color-orange) 15%, transparent);
+  color: var(--color-orange);
+}
+
+/* ===== 通用页：实时归档面板（自动化专属区，紫色系） ===== */
+.smart-notes-auto-panel {
+  border: var(--border-width) solid
+    color-mix(in srgb, var(--color-purple) 25%, var(--background-modifier-border));
+  background: color-mix(in srgb, var(--color-purple) 6%, var(--background-primary));
+  border-radius: var(--sn-radius-card);
+  padding: 8px 12px;
+  margin-bottom: 12px;
+}
+
+.smart-notes-auto-panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 4px 0 8px;
+}
+
+.smart-notes-auto-panel-title {
+  font-weight: 600;
+  color: var(--text-normal);
+}
+
+.smart-notes-auto-panel .setting-item {
+  border-top: none;
+}
+
+/* ===== 通用页：排除文件夹卡片 ===== */
+.smart-notes-excluded {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 260px;
+}
+
+.smart-notes-excluded-empty {
+  color: var(--text-muted);
+  font-size: var(--font-ui-smaller);
+}
+
+.smart-notes-excluded-chip {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  border: var(--border-width) solid var(--sn-hairline);
+  border-radius: var(--sn-radius);
+  padding: 4px 8px;
+  background: var(--background-secondary);
+}
+
+.smart-notes-excluded-chip-path {
+  font-family: var(--font-monospace);
+  font-size: var(--font-ui-smaller);
+  overflow-wrap: anywhere;
+}
+
+.smart-notes-excluded-chip-remove {
+  flex: none;
+  line-height: 1;
+  padding: 2px 8px;
+}
+
+.smart-notes-excluded-add {
+  display: flex;
+  gap: 6px;
+}
+
+.smart-notes-excluded-add-input {
+  flex: 1;
+}
+
+.smart-notes-excluded-add-btn {
+  flex: none;
+}
+
 /* ===== 确认 / 编辑弹窗 ===== */
 .smart-notes-confirm p {
   color: var(--text-muted);

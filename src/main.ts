@@ -17,9 +17,17 @@ import { ActivityLog, FileOrganizer } from "./services/fileOrganizer";
 import { EngineLevel, OllamaPromptContext, OllamaSettings } from "./types";
 import { t, initLocale } from "./i18n";
 import { BatchReportModal } from "./ui/batchReportModal";
+import {
+  scanDelayQueue,
+  touchQueueEntry,
+  removeQueueEntry,
+  renameQueueEntry,
+} from "./utils/delayQueue";
 
 const CREATE_DEBOUNCE_MS = 5000;
 const INTERNAL_MOVE_RESET_MS = 1500;
+/** 静默期扫描间隔：只比对时间戳，开销可忽略 */
+const DELAY_SWEEP_MS = 1000;
 
 /**
  * Obsidian 智能笔记整理插件
@@ -35,11 +43,16 @@ export default class SmartNotesPlugin extends Plugin {
   dispatcher = new EngineDispatcher();
   organizerService!: OrganizerService;
   activityLog!: ActivityLog;
+  private organizer!: FileOrganizer;
 
   /** 自身移动引起的 rename 事件标记，避免整理循环 */
   private internalMove = false;
   /** 新建笔记防抖计时器 */
   private pendingCreates = new Map<string, ReturnType<typeof setTimeout>>();
+  /** 静默期扫描是否在执行中（防重入：单篇处理可能超过 1 个扫描间隔） */
+  private sweeping = false;
+  /** 队列内存变更未落盘标记（扫描循环里合并写盘，避免 modify 高频 IO） */
+  private queueDirty = false;
 
   /** 标记一次插件内部移动（供撤销等 UI 操作复用，防整理回环） */
   markInternalMove(): void {
@@ -52,6 +65,10 @@ export default class SmartNotesPlugin extends Plugin {
     this.initEngines();
     this.registerCommands();
     this.registerEvents();
+
+    // 静默期：启动播种（Inbox 现有文件从启动时刻起算冷却期）+ 每秒扫描
+    this.seedDelayQueue();
+    this.registerDelaySweep();
 
     this.addRibbonIcon("folder-input", t("cmd.organizeInbox"), () =>
       this.organizeInboxCommand()
@@ -93,6 +110,8 @@ export default class SmartNotesPlugin extends Plugin {
     this.ruleEngine.setRules(this.settings.rules);
     this.ruleEngine.setInboxFolder(this.settings.inboxFolder);
     this.sharedModelEngine.setInboxFolder(this.settings.inboxFolder);
+    // 延迟从关闭切到开启（或 Inbox 变更）时，为尚无记录的 Inbox 文件播种
+    this.seedDelayQueue();
     this.tfidfEngine.setOptions({
       threshold: this.settings.tfidfThreshold,
       maxNotes: this.settings.tfidfMaxNotes,
@@ -111,7 +130,8 @@ export default class SmartNotesPlugin extends Plugin {
 
   private initEngines(): void {
     this.activityLog = new ActivityLog(this.app, this.manifest.dir ?? "");
-    const organizer = new FileOrganizer(this.app, this.settings, this.activityLog);
+    this.organizer = new FileOrganizer(this.app, this.settings, this.activityLog);
+    const organizer = this.organizer;
     this.organizerService = new OrganizerService(
       this.app,
       this.settings,
@@ -187,9 +207,8 @@ export default class SmartNotesPlugin extends Plugin {
       id: "rebuild-tfidf-cache",
       name: t("cmd.rebuildCache"),
       callback: async () => {
-        this.tfidfEngine.invalidateCache();
-        await this.tfidfEngine.initialize();
-        new Notice(t("tfidf.rebuildDone"));
+        const stats = await this.tfidfEngine.learn();
+        new Notice(t("tfidf.rebuildDone", stats));
       },
     });
   }
@@ -200,6 +219,11 @@ export default class SmartNotesPlugin extends Plugin {
         if (!(file instanceof TFile) || file.extension !== "md") return;
         if (this.settings.autoOrganizeMode === AutoOrganizeMode.Off) return;
         if (!this.inScope(file)) return;
+        // 静默期模式：入队等待冷却，跳过立即整理
+        if (this.delayActive()) {
+          this.touchAndSave(file.path);
+          return;
+        }
         // 新建时文件往往还是空的，延迟等待用户写入内容
         const timer = setTimeout(() => {
           this.pendingCreates.delete(file.path);
@@ -210,15 +234,169 @@ export default class SmartNotesPlugin extends Plugin {
     );
 
     this.registerEvent(
+      this.app.vault.on("modify", (file) => {
+        if (!(file instanceof TFile) || file.extension !== "md") return;
+        if (!this.delayActive()) return;
+        if (!this.inScope(file)) return;
+        // 静默期语义：继续编辑会顺延该篇的冷却计时
+        const queue = this.settings.delayQueue;
+        if (file.path in queue) {
+          touchQueueEntry(queue, file.path, Date.now());
+          this.queueDirty = true;
+        }
+      })
+    );
+
+    this.registerEvent(
       this.app.vault.on("rename", (file, oldPath) => {
-        void oldPath;
         if (!(file instanceof TFile) || file.extension !== "md") return;
         if (this.internalMove) return;
         if (this.settings.autoOrganizeMode === AutoOrganizeMode.Off) return;
         if (!this.inScope(file)) return;
+        // 静默期模式：保留原计时进度或按新进入处理
+        if (this.delayActive()) {
+          const queue = this.settings.delayQueue;
+          if (!renameQueueEntry(queue, oldPath, file.path)) {
+            touchQueueEntry(queue, file.path, Date.now());
+          }
+          this.queueDirty = true;
+          return;
+        }
         void this.autoOrganize(file);
       })
     );
+  }
+
+  /** 静默期延迟（毫秒）：0 = 立即（原行为） */
+  private delayMs(): number {
+    return (this.settings.autoOrganizeDelaySec || 0) * 1000;
+  }
+
+  /** 延迟模式生效中：实时归档开启且静默期大于 0 */
+  private delayActive(): boolean {
+    return (
+      this.settings.autoOrganizeMode !== AutoOrganizeMode.Off &&
+      this.delayMs() > 0
+    );
+  }
+
+  /** 入队并标记待落盘（写盘合并到扫描循环，避免 modify 高频 IO） */
+  private touchAndSave(path: string): void {
+    touchQueueEntry(this.settings.delayQueue, path, Date.now());
+    this.queueDirty = true;
+  }
+
+  /** 启动/延迟开启时播种：Inbox 里尚无记录的文件从当前时刻起算冷却期 */
+  private seedDelayQueue(): void {
+    if (!this.delayActive() || !this.organizer) return;
+    const now = Date.now();
+    let changed = false;
+    for (const file of this.organizer.listPendingFiles()) {
+      if (!(file.path in this.settings.delayQueue)) {
+        touchQueueEntry(this.settings.delayQueue, file.path, now);
+        changed = true;
+      }
+    }
+    if (changed) void this.saveData(this.settings);
+  }
+
+  /** 注册静默期扫描（Obsidian registerInterval 随插件卸载自动清理） */
+  private registerDelaySweep(): void {
+    this.registerInterval(
+      window.setInterval(() => void this.sweepDelayQueue(), DELAY_SWEEP_MS)
+    );
+  }
+
+  /**
+   * 静默期扫描：合并落盘 -> 清理过期条目 -> 处理到期待队列。
+   * 单篇处理前重验文件仍在 Inbox；被手动搬走的条目静默出队；
+   * 单篇异常只跳过该篇，不影响其余队列。
+   */
+  private async sweepDelayQueue(): Promise<void> {
+    if (this.sweeping || !this.delayActive()) return;
+    this.sweeping = true;
+    try {
+      if (this.queueDirty) {
+        await this.saveData(this.settings);
+        this.queueDirty = false;
+      }
+      const inbox = this.settings.inboxFolder;
+      const inboxPaths = new Set<string>();
+      for (const f of this.app.vault.getMarkdownFiles()) {
+        const idx = f.path.lastIndexOf("/");
+        if ((idx === -1 ? "" : f.path.slice(0, idx)) === inbox) {
+          inboxPaths.add(f.path);
+        }
+      }
+      const { due, stale } = scanDelayQueue(
+        this.settings.delayQueue,
+        inboxPaths,
+        Date.now(),
+        this.delayMs()
+      );
+      for (const path of stale) {
+        removeQueueEntry(this.settings.delayQueue, path);
+      }
+      if (stale.length > 0) this.queueDirty = true;
+      if (due.length === 0) {
+        if (this.queueDirty) await this.saveData(this.settings);
+        this.queueDirty = false;
+        return;
+      }
+
+      const movedNames: string[] = [];
+      const suggestions: string[] = [];
+      for (const path of due) {
+        const file = this.app.vault.getAbstractFileByPath(path);
+        // 二次校验：处理期间文件可能被移动/删除
+        if (!(file instanceof TFile)) {
+          removeQueueEntry(this.settings.delayQueue, path);
+          continue;
+        }
+        try {
+          if (this.settings.autoOrganizeMode === AutoOrganizeMode.Notify) {
+            const { suggestion, error } = await this.organizerService.analyze(file);
+            if (error || !suggestion) continue;
+            if (suggestion.suggestedPath) {
+              suggestions.push(
+                `${file.basename} → ${suggestion.suggestedPath}（${suggestion.reason}）`
+              );
+            } else {
+              await this.organizerService.logRefusal(file, suggestion, "auto");
+            }
+          } else {
+            const result = await this.organizerService.organizeOne(file, "auto");
+            if (result.moved) {
+              movedNames.push(file.basename);
+              removeQueueEntry(this.settings.delayQueue, path);
+              continue;
+            }
+          }
+          // 文件仍在 Inbox（Notify 提醒过 / 弃权未动）：刷新计时，下个静默期再见
+          touchQueueEntry(this.settings.delayQueue, path, Date.now());
+        } catch (err) {
+          console.error("[SmartNotes] 定时归档失败", path, err);
+          touchQueueEntry(this.settings.delayQueue, path, Date.now());
+        }
+      }
+      await this.saveData(this.settings);
+      this.queueDirty = false;
+
+      if (movedNames.length > 0) {
+        new Notice(t("notify.delayedMoved", { n: movedNames.length }));
+      }
+      if (suggestions.length > 0) {
+        new Notice(
+          t("notify.delayedSuggestions", {
+            n: suggestions.length,
+            list: suggestions.join("\n"),
+          }),
+          8000
+        );
+      }
+    } finally {
+      this.sweeping = false;
+    }
   }
 
   /** 文件是否在整理范围内（Inbox 或全库） */

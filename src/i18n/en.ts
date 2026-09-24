@@ -148,10 +148,11 @@ export const en: Partial<Record<I18nKey, string>> = {
   "tfidf.thresholdDesc": "Currently {pct}% — below it, notes stay in place",
   "tfidf.maxNotes": "Notes per folder",
   "tfidf.maxNotesDesc": "Each folder uses its newest notes first to avoid slowdowns on large vaults",
-  "tfidf.rebuild": "Rebuild feature cache",
-  "tfidf.rebuildDesc": "Recalculated automatically as folders change; manual trigger available",
-  "tfidf.rebuildButton": "Rebuild",
-  "tfidf.rebuildDone": "Folder features rebuilt",
+  "tfidf.rebuild": "Learn now",
+  "tfidf.rebuildDesc":
+    "Rebuild folder features from current note content; also recalculated automatically as content changes",
+  "tfidf.rebuildButton": "Learn",
+  "tfidf.rebuildDone": "Learned: {folders} folders / {notes} notes in {ms}ms",
 
   "ollama.title": "Level 3: Local LLM (Ollama)",
   "ollama.address": "Ollama address",
@@ -192,15 +193,28 @@ export const en: Partial<Record<I18nKey, string>> = {
   "general.auto.off": "Off",
   "general.auto.notify": "Notify only (no file moves)",
   "general.auto.move": "File directly (silent moves)",
+  "general.autoPanelTitle": "Live filing",
+  "general.moveRisk": "Move mode: files leave Inbox automatically",
+  "general.delay": "Quiet period",
+  "general.delayDesc":
+    "How long a note must stay untouched before it is filed; editing or renaming resets the timer. All zeros means file immediately",
+  "general.delayH": "h",
+  "general.delayM": "m",
+  "general.delayS": "s",
+  "general.delayPreset": "Apply preset",
+  "general.excluded": "Excluded folders",
+  "general.excludedDesc":
+    "These folders and their children are never touched by organizing or feature computation",
+  "general.excludedEmpty": "No excluded folders yet",
+  "general.excludedRemove": "Remove this exclusion",
+  "general.excludedAddBtn": "Add",
+  "general.excludedPlaceholder": "Type or pick a folder path from suggestions",
   "general.inbox": "Inbox folder name",
   "general.inboxDesc":
     "Auto filing only watches new notes inside this folder; leave empty to watch the whole vault",
   "general.unclassified": "Unclassified folder",
   "general.unclassifiedDesc":
     "Fallback target when no engine has a suggestion; leave empty to keep notes in place",
-  "general.excluded": "Excluded folders",
-  "general.excludedDesc":
-    "Comma-separated; these folders and their children are never touched",
   "general.locale": "Interface language",
   "general.localeDesc": "Language for the settings panel, notices and commands",
   "general.locale.auto": "System",
@@ -259,9 +273,11 @@ export const en: Partial<Record<I18nKey, string>> = {
   "notify.inboxErrors": ", {n} failed (see the organizing report)",
   "notify.inboxStart": "Organizing…",
   "notify.inboxProgress": "Organizing {done}/{total}: {name}",
+  "notify.delayedMoved": "Quiet period over: {n} note(s) filed automatically",
+  "notify.delayedSuggestions": "Quiet period over: {n} suggestion(s)\n{list}",
 
   "cmd.organizeCurrent": "Organize current note",
   "cmd.previewSuggestion": "Preview suggestion for current note",
   "cmd.organizeInbox": "Organize Inbox now",
-  "cmd.rebuildCache": "Rebuild Level 2 feature cache",
+  "cmd.rebuildCache": "Learn now (rebuild feature index)",
 };
