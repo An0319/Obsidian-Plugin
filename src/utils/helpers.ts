@@ -122,6 +122,21 @@ export function normalizeFolderPath(path: string): string {
   return path.trim().replace(/^\/+|\/+$/g, "").replace(/\/{2,}/g, "/");
 }
 
+/** 规则目标中的收件箱占位符：运行时解析为设置里的 Inbox 文件夹名 */
+export const INBOX_TOKEN = "{inbox}";
+
+/**
+ * 解析规则目标文件夹中的 {inbox} 占位符。
+ * 历史种子规则把目标硬编码为「收件箱」，与用户设置的 Inbox 名脱钩；
+ * 占位符让兜底规则始终跟随 Inbox 设置，避免出现第二个收件箱。
+ */
+export function resolveRuleTarget(folder: string, inboxFolder: string): string {
+  return normalizeFolderPath(folder).replace(
+    INBOX_TOKEN,
+    normalizeFolderPath(inboxFolder)
+  );
+}
+
 /** 校验共享配置文件的基本合法性 */
 export function isValidSharedConfig(obj: unknown): obj is {
   formatVersion: number;

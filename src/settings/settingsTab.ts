@@ -19,6 +19,7 @@ import { collectUserFolderTree } from "../services/vaultFolders";
 import { UserFolderNode, MAX_TREE_NODES } from "../services/userFolders";
 import { describeRule } from "../services/ruleDescribe";
 import { parentFolder } from "../services/fileOrganizer";
+import { INBOX_TOKEN } from "../utils/helpers";
 import {
   CUSTOM_RULES_PATH,
   parseCustomRules,
@@ -472,9 +473,8 @@ export class SmartNotesSettingTab extends PluginSettingTab {
           this.display();
           const lines = incoming.map((r) => {
             const m = byId.get(r.id);
-            return m?.reused
-              ? `${r.name} → ${m.mappedFolder}`
-              : `${r.name} → ${m?.mappedFolder}`;
+            const folder = m?.mappedFolder ?? r.targetFolder;
+            return `${r.name} → ${folder === INBOX_TOKEN ? settings.inboxFolder : folder}`;
           });
           new Notice(t("seed.imported", { n: incoming.length, detail: lines.join("\n") }), 8000);
         })
@@ -824,6 +824,16 @@ export class SmartNotesSettingTab extends PluginSettingTab {
       .setName(t("log.clear"))
       .setDesc(t("log.clearDesc"))
       .addButton((b) =>
+        b
+          .setIcon("copy")
+          .setTooltip(t("log.copyTip"))
+          .onClick(async () => {
+            const entries = await log.read();
+            await navigator.clipboard.writeText(JSON.stringify(entries, null, 2));
+            new Notice(t("log.copied"));
+          })
+      )
+      .addButton((b) =>
         b.setButtonText(t("log.clearButton")).setWarning().onClick(async () => {
           await log.clear();
           this.display();
@@ -838,10 +848,12 @@ export class SmartNotesSettingTab extends PluginSettingTab {
         return;
       }
       for (const entry of entries.slice(0, 20)) {
-        logCard.createEl("p", {
-          text: `${entry.time.slice(0, 16).replace("T", " ")}  ${entry.file}: ${entry.from || "/"} -> ${entry.to}  [${entry.engine}]`,
-          cls: "smart-notes-log-line",
-        });
+        const refused = entry.action === "refuse" || (!entry.action && !entry.to);
+        const head = `${entry.time.slice(0, 16).replace("T", " ")}  ${entry.file}: `;
+        const text = refused
+          ? `${head}${t("log.refused")}  [${entry.engine}] ${entry.reason}`
+          : `${head}${entry.from || "/"} -> ${entry.to}  [${entry.engine}]`;
+        logCard.createEl("p", { text, cls: "smart-notes-log-line" });
       }
     });
   }
@@ -853,7 +865,7 @@ export class SmartNotesSettingTab extends PluginSettingTab {
     settings.rules.forEach((rule, index) => {
       const setting = new Setting(wrap)
         .setName(`${index + 1}. ${rule.name}`)
-        .setDesc(`${describeRule(rule)} → ${rule.targetFolder}`);
+        .setDesc(`${describeRule(rule)} → ${targetLabel(rule.targetFolder)}`);
       setting.addToggle((tx) =>
         tx.setValue(rule.enabled).onChange(async (v) => {
           rule.enabled = v;
@@ -1027,6 +1039,11 @@ export class SmartNotesSettingTab extends PluginSettingTab {
       });
     }
   }
+}
+
+/** 规则目标显示：{inbox} 占位符转为人话（跟随 Inbox 设置） */
+function targetLabel(folder: string): string {
+  return folder === INBOX_TOKEN ? t("rules.inboxToken") : folder;
 }
 
 export { obsidianHttp };

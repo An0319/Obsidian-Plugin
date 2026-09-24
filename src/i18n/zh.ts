@@ -22,14 +22,14 @@ export const zh = {
     "在这里改语言：「通用」分页 → 界面语言，可选 自动（跟随 Obsidian）/ 中文 / English。",
   "quick.step2Title": "第 2 步 · 跑第一次整理",
   "quick.step2Desc":
-    "「通用」分页确认 Inbox 文件夹名 → 把几篇待归档笔记放进去 → Ctrl+P 输入「立即整理 Inbox」回车 → 弹出整理报告单：每篇搬去了哪、依据是什么、把握多大；不满意点「撤销」送回原位。",
+    "「通用」分页确认 Inbox 文件夹名 → 把几篇待归档笔记放进去 → Ctrl+P 输入「立即整理 Inbox」回车 → 弹出整理报告单：每篇搬去了哪、依据是什么、把握多大；不满意点「退回原位」送回原位。",
   "quick.step3Title": "第 3 步 · 教它你的规矩",
   "quick.stepsTitle": "三步上手",
   "quick.step3Desc":
     "「规则与文件夹」分页：在「从已有文件夹开始」点任意文件夹的「建规则」一键生成草稿；或点「导入种子规则」拿一套日期、会议、模板等现成规则；也可「新建规则」从零写。",
   "quick.mapTitle": "什么需求，用什么功能",
   "quick.map1Need": "攒了一批笔记没归档，想一口气清完",
-  "quick.map1How": "Ctrl+P →「立即整理 Inbox」批量整理；报告单支持逐篇或整批撤销，放心跑。",
+  "quick.map1How": "Ctrl+P →「立即整理 Inbox」批量整理；报告单支持逐篇或整批退回原位，放心跑。",
   "quick.map2Need": "记笔记时文件自己乱跳，打断思路",
   "quick.map2How": "「通用」分页 → 实时归档 → 改为「只提醒」：只给建议，文件原地不动。",
   "quick.map3Need": "某类笔记永远该进某个文件夹",
@@ -103,11 +103,12 @@ export const zh = {
   "rules.deleteTip": "删除",
   "rules.upTip": "上移（提高优先级）",
   "rules.downTip": "下移（降低优先级）",
+  "rules.inboxToken": "收件箱（跟随 Inbox 设置）",
 
   // 种子规则
   "seed.label": "内置规则集",
   "seed.desc":
-    "一键导入默认规则（日志归位 / 归档陈旧笔记 / 收件箱兜底）；已有同名规则会跳过，目标文件夹自动复用你库内已有的同名或等价文件夹",
+    "一键导入默认规则（日志归位 / 归档陈旧笔记 / 收件箱兜底）；已有同名规则会跳过，目标文件夹自动复用你库内已有的同名或等价文件夹；收件箱兜底始终跟随通用设置里的 Inbox 文件夹名",
   "seed.button": "导入种子规则",
   "seed.alreadyImported": "种子规则已存在，无需重复导入",
   "seed.imported": "已导入 {n} 条种子规则：\n{detail}",
@@ -209,33 +210,39 @@ export const zh = {
   "general.resetDone": "已恢复默认设置",
   "general.enableLog": "记录整理日志",
   "general.enableLogDesc": "保存最近 200 次移动记录到插件目录（organize-log.json），便于追溯",
+  "settings.archiveRuleMigrated":
+    "已停用默认规则「归档陈旧笔记」：时间型规则在兜底链上会归档所有语义弃权的笔记。需要时可在「规则与文件夹」页重新开启。",
 
   // 整理记录
   "log.title": "最近整理记录",
   "log.desc":
-    "仅保留最近 200 条移动记录（organize-log.json，存于插件目录），超出自动丢弃最旧的。数据完全本地保存，可随时清空。",
+    "仅保留最近 200 条记录（organize-log.json，存于插件目录），含移动与弃权，超出自动丢弃最旧的。数据完全本地保存，可随时清空。",
   "log.clear": "清空整理记录",
   "log.clearDesc": "删除全部历史记录，此操作不可恢复",
   "log.clearButton": "清空",
   "log.cleared": "整理记录已清空",
   "log.empty": "暂无记录",
+  "log.copyTip": "复制完整日志 JSON（发给 AI 或开发者排查问题）",
+  "log.copied": "已复制日志 JSON",
+  "log.refused": "弃权",
 
   // 整理报告
   "report.title": "整理报告",
   "report.moved": "已移动 {n} 篇",
   "report.kept": "保留原位 {n} 篇",
   "report.keptEmpty": "全部笔记都已归位",
-  "report.undo": "撤销",
-  "report.undoAll": "全部撤销",
-  "report.undone": "已撤销",
-  "report.undoConfirmTitle": "撤销确认",
+  "report.undo": "退回原位",
+  "report.undoAll": "全部退回",
+  "report.undone": "已退回",
+  "report.undoConfirmTitle": "退回确认",
   "report.undoConfirm": "将把本次整理移动的 {n} 篇笔记全部移回原位，确定继续吗？",
   "report.undoDone": "已移回原位",
-  "report.undoDoneAll": "已撤销 {n} 篇移动",
-  "report.undoFail": "撤销 {n} 篇成功，{m} 篇失败",
+  "report.undoDoneAll": "已退回 {n} 篇移动",
+  "report.undoFail": "退回 {n} 篇成功，{m} 篇失败",
   "report.fileGone": "文件已不在预期位置，请手动处理",
   "report.to": "→",
   "report.keptReason": "保留原因",
+  "report.refused": "弃权",
 
   // 通知
   "notify.autoMoved": "已将「{name}」移至 {to}（{reason}）",

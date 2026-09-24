@@ -121,6 +121,8 @@ export interface Suggestion {
   reason: string;
   /** 产生建议的引擎层级 */
   engine: EngineLevel;
+  /** 弃权诊断：相似度最高的候选文件夹与分数（仅弃权时携带，供日志回溯） */
+  diagnostics?: { folder: string; score: number }[];
 }
 
 /** 所有引擎都必须实现该接口 */

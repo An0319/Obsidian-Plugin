@@ -6,7 +6,7 @@ import {
   OrganizeRule,
   FolderVector,
 } from "../types";
-import { matchRule, normalizeFolderPath, isValidSharedConfig } from "../utils/helpers";
+import { matchRule, isValidSharedConfig, resolveRuleTarget } from "../utils/helpers";
 import { tfidfVector, cosineSimilarity } from "./tfidf/tfidf";
 
 /**
@@ -21,6 +21,7 @@ export class SharedModelEngine implements IOrganizeEngine {
   readonly level = EngineLevel.SharedModel;
 
   private config: SharedModelConfig | null = null;
+  private inboxFolder = "";
 
   get configName(): string {
     return this.config?.name ?? "";
@@ -28,6 +29,11 @@ export class SharedModelEngine implements IOrganizeEngine {
 
   get isLoaded(): boolean {
     return this.config !== null;
+  }
+
+  /** 同步 Inbox 文件夹名，供共享配置规则中的 {inbox} 占位符解析 */
+  setInboxFolder(folder: string): void {
+    this.inboxFolder = folder;
   }
 
   /** 从 JSON 字符串加载配置，非法配置抛出异常 */
@@ -93,7 +99,7 @@ export class SharedModelEngine implements IOrganizeEngine {
     for (const rule of this.config.rules) {
       if (matchRule(rule, title, content, filePath)) {
         return {
-          suggestedPath: normalizeFolderPath(rule.targetFolder),
+          suggestedPath: resolveRuleTarget(rule.targetFolder, this.inboxFolder),
           confidence: Math.min(1, rule.weight ?? 1),
           reason: `共享配置规则「${rule.name}」命中`,
           engine: this.level,

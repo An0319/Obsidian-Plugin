@@ -24,6 +24,36 @@ describe("RuleEngine", () => {
     expect(result.confidence).toBe(1);
   });
 
+  it("{inbox} 占位符解析为构造时传入的 Inbox 名", async () => {
+    const engine = new RuleEngine(
+      [rule({ id: "fb", operator: RuleOperator.Always, targetFolder: "{inbox}" })],
+      "收集箱"
+    );
+    const result = await engine.analyze("随便", "内容", "Inbox/a.md");
+    expect(result.suggestedPath).toBe("收集箱");
+  });
+
+  it("setInboxFolder 可更新占位符解析目标", async () => {
+    const engine = new RuleEngine([
+      rule({ id: "fb", operator: RuleOperator.Always, targetFolder: "{inbox}" }),
+    ]);
+    engine.setInboxFolder("Inbox");
+    const first = await engine.analyze("随便", "内容", "Inbox/a.md");
+    expect(first.suggestedPath).toBe("Inbox");
+    engine.setInboxFolder("收件箱");
+    const second = await engine.analyze("随便", "内容", "Inbox/a.md");
+    expect(second.suggestedPath).toBe("收件箱");
+  });
+
+  it("无占位符的目标不受 Inbox 名影响", async () => {
+    const engine = new RuleEngine(
+      [rule({ id: "r1", pattern: "投资", targetFolder: "投资笔记" })],
+      "收集箱"
+    );
+    const result = await engine.analyze("随便", "投资相关", "Inbox/a.md");
+    expect(result.suggestedPath).toBe("投资笔记");
+  });
+
   it("标题包含规则命中", async () => {
     const engine = new RuleEngine([
       rule({
@@ -234,20 +264,28 @@ describe("RuleEngine", () => {
       ["13812345678 客户联系"],
       ["99999999"],
     ])("长数字串（非日期）误命中防护：%s", async (filename) => {
-      const engine = new RuleEngine(defaultRules());
+      const engine = new RuleEngine(defaultRules(), "收件箱");
       const result = await engine.analyze(filename, "内容", `Inbox/${filename}.md`, Date.now());
       expect(result.suggestedPath).toBe("收件箱");
     });
 
-    it("超过 30 天未修改进归档", async () => {
-      const engine = new RuleEngine(defaultRules());
+    it("超过 30 天未修改进归档（规则需显式启用）", async () => {
+      const rules = defaultRules().map((r) =>
+        r.id === "seed-archive" ? { ...r, enabled: true } : r
+      );
+      const engine = new RuleEngine(rules);
       const stale = Date.now() - 40 * 24 * 60 * 60 * 1000;
       const result = await engine.analyze("随笔", "内容", "Inbox/随笔.md", stale);
       expect(result.suggestedPath).toBe("归档");
     });
 
-    it("新笔记命中收件箱兜底", async () => {
-      const engine = new RuleEngine(defaultRules());
+    it("陈旧归档规则默认关闭", () => {
+      const archive = defaultRules().find((r) => r.id === "seed-archive");
+      expect(archive?.enabled).toBe(false);
+    });
+
+    it("收件箱兜底默认使用 {inbox} 占位符并跟随传入的 Inbox 名", async () => {
+      const engine = new RuleEngine(defaultRules(), "收件箱");
       const result = await engine.analyze(
         "随手记",
         "内容",

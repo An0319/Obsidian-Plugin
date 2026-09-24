@@ -4,6 +4,7 @@ import {
   DEFAULT_SETTINGS,
   AutoOrganizeMode,
   migrateSettings,
+  migrateLegacySeedRules,
 } from "./settings/settings";
 import { SmartNotesSettingTab, obsidianHttp } from "./settings/settingsTab";
 import { EngineDispatcher } from "./scheduler/dispatcher";
@@ -73,8 +74,13 @@ export default class SmartNotesPlugin extends Plugin {
       DEFAULT_SETTINGS.ollama,
       (data as { ollama?: Partial<OllamaSettings> } | null)?.ollama
     );
+    // 0.3.5 一次性种子规则修正：收件箱兜底跟随 Inbox 设置、停用陈旧归档
+    const { archiveDisabled } = migrateLegacySeedRules(migrated);
     this.settings = migrated;
     initLocale(migrated.locale);
+    if (archiveDisabled) {
+      new Notice(t("settings.archiveRuleMigrated"), 10000);
+    }
   }
 
   async saveSettings(): Promise<void> {
@@ -85,6 +91,8 @@ export default class SmartNotesPlugin extends Plugin {
   /** 将当前设置同步到各引擎 */
   private applySettings(): void {
     this.ruleEngine.setRules(this.settings.rules);
+    this.ruleEngine.setInboxFolder(this.settings.inboxFolder);
+    this.sharedModelEngine.setInboxFolder(this.settings.inboxFolder);
     this.tfidfEngine.setOptions({
       threshold: this.settings.tfidfThreshold,
       maxNotes: this.settings.tfidfMaxNotes,
@@ -111,7 +119,7 @@ export default class SmartNotesPlugin extends Plugin {
       organizer
     );
 
-    this.ruleEngine = new RuleEngine(this.settings.rules);
+    this.ruleEngine = new RuleEngine(this.settings.rules, this.settings.inboxFolder);
     this.tfidfEngine = new TfidfEngine(this.organizerService.snapshotProvider(), {
       threshold: this.settings.tfidfThreshold,
       maxNotes: this.settings.tfidfMaxNotes,
@@ -232,7 +240,11 @@ export default class SmartNotesPlugin extends Plugin {
         const { suggestion, error } = await this.organizerService.analyze(file);
         if (error) return;
         if (!suggestion) return;
-        if (!suggestion.suggestedPath) return;
+        if (!suggestion.suggestedPath) {
+          // 弃权也落日志：top3 诊断让「为什么没建议」可回溯
+          await this.organizerService.logRefusal(file, suggestion, "auto");
+          return;
+        }
         new Notice(
           t("notify.autoSuggest", {
             name: file.basename,
@@ -265,6 +277,7 @@ export default class SmartNotesPlugin extends Plugin {
       return;
     }
     if (!suggestion.suggestedPath) {
+      await this.organizerService.logRefusal(file, suggestion, "manual");
       new Notice(t("notify.keepInPlace", { reason: suggestion.reason }));
       return;
     }

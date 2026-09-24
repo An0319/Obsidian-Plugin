@@ -98,6 +98,74 @@ describe("EngineDispatcher 降级逻辑", () => {
     expect(error).toBeUndefined();
   });
 
+  it("弃权诊断随降级链流转：规则接管时理由附注 top1 摘要", async () => {
+    const dispatcher = new EngineDispatcher();
+    dispatcher.register(
+      stubEngine(EngineLevel.Tfidf, () =>
+        Promise.resolve({
+          suggestedPath: "",
+          confidence: 0.22,
+          reason: "低于阈值 30%：top1 脑科学/情报分析 22%",
+          engine: EngineLevel.Tfidf,
+          diagnostics: [
+            { folder: "脑科学/情报分析", score: 0.22 },
+            { folder: "脑科学/综述", score: 0.15 },
+          ],
+        })
+      )
+    );
+    dispatcher.register(
+      stubEngine(EngineLevel.Rules, () =>
+        Promise.resolve({
+          suggestedPath: "收件箱",
+          confidence: 1,
+          reason: "命中规则「收件箱兜底」",
+          engine: EngineLevel.Rules,
+        })
+      )
+    );
+    const { suggestion } = await dispatcher.analyzeWithFallback(
+      "t",
+      "c",
+      "p",
+      EngineLevel.Tfidf
+    );
+    expect(suggestion?.reason).toBe(
+      "命中规则「收件箱兜底」；Tfidf 弃权（top1 脑科学/情报分析 22%）"
+    );
+  });
+
+  it("弃权引擎无诊断信息时理由保持原样", async () => {
+    const dispatcher = new EngineDispatcher();
+    dispatcher.register(
+      stubEngine(EngineLevel.Tfidf, () =>
+        Promise.resolve({
+          suggestedPath: "",
+          confidence: 0,
+          reason: "知识库中没有可用的文件夹特征",
+          engine: EngineLevel.Tfidf,
+        })
+      )
+    );
+    dispatcher.register(
+      stubEngine(EngineLevel.Rules, () =>
+        Promise.resolve({
+          suggestedPath: "日志",
+          confidence: 1,
+          reason: "命中规则「日志归位」",
+          engine: EngineLevel.Rules,
+        })
+      )
+    );
+    const { suggestion } = await dispatcher.analyzeWithFallback(
+      "t",
+      "c",
+      "p",
+      EngineLevel.Tfidf
+    );
+    expect(suggestion?.reason).toBe("命中规则「日志归位」");
+  });
+
   it("全部引擎弃权时保留最智能引擎的空建议与理由", async () => {
     const dispatcher = new EngineDispatcher();
     dispatcher.register(

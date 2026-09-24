@@ -34,6 +34,7 @@ export class EngineDispatcher {
    * 使用指定层级引擎分析；失败时按层级自动降级。
    * 引擎返回空建议（suggestedPath 为空）视为弃权，继续尝试下一层；
    * 全部弃权时返回最智能引擎的空建议（保留其理由），全部异常时返回 null。
+   * 弃权引擎若携带 top3 诊断，后续引擎接管时在理由中附注弃权摘要，供日志回溯。
    */
   async analyzeWithFallback(
     title: string,
@@ -44,12 +45,19 @@ export class EngineDispatcher {
   ): Promise<{ suggestion: Suggestion | null; degradedFrom?: EngineLevel; error?: string }> {
     let lastError = "";
     let emptyResult: Suggestion | null = null;
+    let abstainDiagnostic: Suggestion | null = null;
     for (const lvl of this.fallbackChain(level)) {
       const engine = this.engines.get(lvl);
       if (!engine) continue;
       try {
         const suggestion = await engine.analyze(title, content, filePath, mtime);
         if (suggestion.suggestedPath) {
+          if (abstainDiagnostic && abstainDiagnostic.diagnostics?.length) {
+            const top = abstainDiagnostic.diagnostics[0];
+            suggestion.reason = `${suggestion.reason}；${EngineLevel[abstainDiagnostic.engine]} 弃权（top1 ${top.folder} ${(
+              top.score * 100
+            ).toFixed(0)}%）`;
+          }
           return {
             suggestion,
             degradedFrom:
@@ -58,6 +66,9 @@ export class EngineDispatcher {
           };
         }
         emptyResult ??= suggestion;
+        if (!abstainDiagnostic || !abstainDiagnostic.diagnostics?.length) {
+          abstainDiagnostic = suggestion;
+        }
       } catch (err) {
         // 层级三不可用时降级；其他引擎异常也记录并继续降级
         lastError =

@@ -21,14 +21,14 @@ export const en: Partial<Record<I18nKey, string>> = {
     "Change it at General → Interface language: System (follow Obsidian) / 中文 / English.",
   "quick.step2Title": "Step 2 · Run your first organize",
   "quick.step2Desc":
-    "Confirm the Inbox folder name under General → put a few unfiled notes in → press Ctrl+P, type \"Organize Inbox now\" and Enter → a report shows where each note went, why, and how confident. Click Undo to send any note back.",
+    "Confirm the Inbox folder name under General → put a few unfiled notes in → press Ctrl+P, type \"Organize Inbox now\" and Enter → a report shows where each note went, why, and how confident. Click \"Move back\" to send any note back.",
   "quick.step3Title": "Step 3 · Teach it your rules",
   "quick.stepsTitle": "Three steps",
   "quick.step3Desc":
     "Rules & Folders tab: click Build rule next to any folder under \"Start from existing folders\", or import the built-in seed rules (date, meeting, template), or create one from scratch.",
   "quick.mapTitle": "Which feature for which need",
   "quick.map1Need": "A pile of unfiled notes to clear at once",
-  "quick.map1How": "Ctrl+P → \"Organize Inbox now\" for a batch run; the report supports undo per note or for the whole batch, so it is safe to run.",
+  "quick.map1How": "Ctrl+P → \"Organize Inbox now\" for a batch run; the report supports moving back per note or the whole batch, so it is safe to run.",
   "quick.map2Need": "Notes jumping around while I write, breaking my focus",
   "quick.map2How": "General → Real-time filing → choose \"Notify only\": advice without moving files.",
   "quick.map3Need": "Certain notes always belong in one folder",
@@ -101,10 +101,11 @@ export const en: Partial<Record<I18nKey, string>> = {
   "rules.deleteTip": "Delete",
   "rules.upTip": "Move up (higher priority)",
   "rules.downTip": "Move down (lower priority)",
+  "rules.inboxToken": "Inbox (follows the Inbox setting)",
 
   "seed.label": "Built-in rule set",
   "seed.desc":
-    "Import the default rules in one click (journal filing / archive stale notes / inbox fallback). Existing rules are skipped; target folders reuse matching folders already in your vault.",
+    "Import the default rules in one click (journal filing / archive stale notes / inbox fallback). Existing rules are skipped; target folders reuse matching folders already in your vault; the inbox fallback always follows the Inbox folder name in General settings.",
   "seed.button": "Import seed rules",
   "seed.alreadyImported": "Seed rules already imported",
   "seed.imported": "Imported {n} seed rules:\n{detail}",
@@ -211,24 +212,29 @@ export const en: Partial<Record<I18nKey, string>> = {
   "general.enableLog": "Keep organizing log",
   "general.enableLogDesc":
     "Stores the last 200 moves in the plugin folder (organize-log.json) for traceability",
+  "settings.archiveRuleMigrated":
+    "Disabled the default \"Archive stale notes\" rule: a time-based rule in the fallback chain would archive every note the semantic engines decline. Re-enable it in Rules & Folders if needed.",
 
   "log.title": "Recent Activity",
   "log.desc":
-    "Keeps the last 200 moves only (organize-log.json in the plugin folder); older entries are dropped. Fully local, clear anytime.",
+    "Keeps the last 200 entries only (organize-log.json in the plugin folder), including moves and refusals; older entries are dropped. Fully local, clear anytime.",
   "log.clear": "Clear organizing log",
   "log.clearDesc": "Deletes all history. This cannot be undone",
   "log.clearButton": "Clear",
   "log.cleared": "Organizing log cleared",
   "log.empty": "No entries yet",
+  "log.copyTip": "Copy the full log JSON (share with AI or developers to diagnose issues)",
+  "log.copied": "Log JSON copied",
+  "log.refused": "Refused",
 
   "report.title": "Organizing Report",
   "report.moved": "{n} moved",
   "report.kept": "{n} kept in place",
   "report.keptEmpty": "Every note has been filed",
-  "report.undo": "Undo",
-  "report.undoAll": "Undo all",
-  "report.undone": "Undone",
-  "report.undoConfirmTitle": "Undo confirmation",
+  "report.undo": "Move back",
+  "report.undoAll": "Move all back",
+  "report.undone": "Moved back",
+  "report.undoConfirmTitle": "Move-back confirmation",
   "report.undoConfirm":
     "This will move all {n} notes handled in this run back to their original locations. Continue?",
   "report.undoDone": "Moved back",
@@ -237,6 +243,7 @@ export const en: Partial<Record<I18nKey, string>> = {
   "report.fileGone": "File is no longer at the expected location — please handle manually",
   "report.to": "→",
   "report.keptReason": "Reason",
+  "report.refused": "Refused",
 
   "notify.autoMoved": "Moved \"{name}\" to {to} ({reason})",
   "notify.autoSuggest":

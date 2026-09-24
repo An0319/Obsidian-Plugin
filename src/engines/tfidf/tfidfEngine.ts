@@ -226,15 +226,22 @@ export class TfidfEngine implements IOrganizeEngine {
       };
     }
 
-    let best: FolderVector | null = null;
-    let bestScore = 0;
+    // 维护 top3 候选：弃权时随建议携带，供日志回溯（词汇不匹配 / 阈值过高可直接判别）
+    const top3: { folder: string; score: number; docCount: number }[] = [];
     for (const fv of this.cache) {
       const score = cosineSimilarity(vector, norm, fv.vector, fv.norm);
-      if (score > bestScore) {
-        bestScore = score;
-        best = fv;
+      const candidate = { folder: fv.folder, score, docCount: fv.docCount };
+      if (
+        top3.length < 3 ||
+        score > top3[top3.length - 1].score
+      ) {
+        top3.push(candidate);
+        top3.sort((a, b) => b.score - a.score);
+        if (top3.length > 3) top3.length = 3;
       }
     }
+    const best = top3[0] ?? null;
+    const bestScore = best?.score ?? 0;
 
     if (best && bestScore >= this.options.threshold) {
       return {
@@ -246,15 +253,24 @@ export class TfidfEngine implements IOrganizeEngine {
         engine: this.level,
       };
     }
+    const tops = top3
+      .map(
+        (c, i) =>
+          `top${i + 1} ${c.folder} ${(c.score * 100).toFixed(0)}%`
+      )
+      .join("，");
     return {
       suggestedPath: "",
       confidence: Math.round(bestScore * 100) / 100,
-      reason:
-        bestScore === 0
-          ? "无法计算相似度"
-          : `最高相似度 ${(bestScore * 100).toFixed(0)}% 低于阈值 ${(
-              this.options.threshold * 100
-            ).toFixed(0)}%`,
+      reason: bestScore === 0
+        ? "无法计算相似度"
+        : `低于阈值 ${(this.options.threshold * 100).toFixed(0)}%：${tops}`,
+      diagnostics: bestScore === 0
+        ? []
+        : top3.map((c) => ({
+            folder: c.folder,
+            score: Math.round(c.score * 100) / 100,
+          })),
       engine: this.level,
     };
   }

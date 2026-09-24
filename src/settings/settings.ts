@@ -48,6 +48,8 @@ export interface SmartNotesSettings {
   ignoredExtensions: string[];
   /** 是否记录整理日志 */
   enableLog: boolean;
+  /** 一次性迁移标记：0.3.5 种子规则修正（{inbox} 占位符 + 停用陈旧归档）是否已执行 */
+  legacySeedMigrated: boolean;
 }
 
 export const DEFAULT_SETTINGS: SmartNotesSettings = {
@@ -73,6 +75,7 @@ export const DEFAULT_SETTINGS: SmartNotesSettings = {
   excludedFolders: [".obsidian", ".trash", "模板", "attachments"],
   ignoredExtensions: [".png", ".jpg", ".jpeg", ".gif", ".webp", ".pdf", ".mp4", ".mp3", ".svg"],
   enableLog: true,
+  legacySeedMigrated: false,
 };
 
 /**
@@ -105,5 +108,41 @@ export function migrateSettings(raw: unknown): SmartNotesSettings {
   if (typeof merged.lastSettingsTab !== "string" || !merged.lastSettingsTab) {
     merged.lastSettingsTab = "quickstart";
   }
+  if (typeof merged.legacySeedMigrated !== "boolean") {
+    merged.legacySeedMigrated = false;
+  }
   return merged;
+}
+
+/**
+ * 一次性种子规则迁移（0.3.5）：
+ * 1. 老版种子规则「收件箱兜底」目标硬编码为「收件箱」，与 Inbox 设置脱钩，
+ *    会把 Inbox 里的笔记搬进第二个收件箱——改写为 {inbox} 占位符；
+ * 2. 「归档陈旧笔记」属时间型破坏性规则，放在兜底链上会归档所有语义弃权的
+ *    笔记（复制文件的旧 mtime 也会误触发）——停用并告知用户可重新开启。
+ * 幂等：仅当 legacySeedMigrated 为 false 时执行；archiveDisabled 为 true 时
+ * 调用方应弹一次性提示。返回值同时携带是否发生迁移，便于测试断言。
+ */
+export function migrateLegacySeedRules(settings: SmartNotesSettings): {
+  migrated: boolean;
+  archiveDisabled: boolean;
+} {
+  if (settings.legacySeedMigrated || !Array.isArray(settings.rules)) {
+    return { migrated: false, archiveDisabled: false };
+  }
+  let migrated = false;
+  let archiveDisabled = false;
+  for (const rule of settings.rules) {
+    if (rule.id === "seed-inbox-fallback" && rule.targetFolder === "收件箱") {
+      rule.targetFolder = "{inbox}";
+      migrated = true;
+    }
+    if (rule.id === "seed-archive" && rule.enabled) {
+      rule.enabled = false;
+      archiveDisabled = true;
+      migrated = true;
+    }
+  }
+  settings.legacySeedMigrated = true;
+  return { migrated, archiveDisabled };
 }

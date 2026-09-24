@@ -111,6 +111,21 @@ export class OrganizerService {
     return to;
   }
 
+  /** 记录一次弃权：笔记未被移动，理由中带 top3 诊断供日志回溯 */
+  async logRefusal(
+    file: TFile,
+    suggestion: Suggestion,
+    mode: "auto" | "manual"
+  ): Promise<void> {
+    await this.organizer.recordRefusal(
+      file,
+      file.path,
+      EngineLevel[suggestion.engine],
+      suggestion.reason,
+      mode
+    );
+  }
+
   /** 整理单个文件（分析 + 应用） */
   async organizeOne(
     file: TFile,
@@ -122,6 +137,9 @@ export class OrganizerService {
     const { suggestion, degradedFrom, error } = await this.analyze(file);
     if (!suggestion || !suggestion.suggestedPath) {
       if (error) return { moved: false, suggestion, error };
+      if (suggestion) {
+        await this.logRefusal(file, suggestion, mode);
+      }
       return { moved: false, suggestion };
     }
     void degradedFrom;
@@ -163,6 +181,7 @@ export class OrganizerService {
               ? result.suggestion.reason
               : "引擎不可用",
           confidence: result.suggestion?.confidence ?? 0,
+          refused: this.isRefusal(result),
         });
         if (result.moved) moved++;
         else skipped++;
@@ -183,6 +202,20 @@ export class OrganizerService {
     }
     return { moved, skipped, errors, entries };
   }
+
+  /** 弃权判定：有引擎分析结果但拒绝给出目标（排除引擎报错的情况） */
+  private isRefusal(result: {
+    moved: boolean;
+    suggestion: Suggestion | null;
+    error?: string;
+  }): boolean {
+    return (
+      !result.moved &&
+      !result.error &&
+      !!result.suggestion &&
+      !result.suggestion.suggestedPath
+    );
+  }
 }
 
 /** 批量整理的逐篇明细条目（整理报告数据源） */
@@ -201,6 +234,8 @@ export interface BatchEntry {
   confidence: number;
   /** 撤销状态（报告面板运行时管理） */
   undone?: boolean;
+  /** true = 引擎弃权未移动（报告面板展示弃权徽标） */
+  refused?: boolean;
 }
 
 /** 路径是否位于排除文件夹内 */

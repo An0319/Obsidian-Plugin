@@ -6,7 +6,7 @@ import {
   RuleField,
   RuleOperator,
 } from "../types";
-import { matchRule, normalizeFolderPath } from "../utils/helpers";
+import { matchRule, resolveRuleTarget } from "../utils/helpers";
 
 /**
  * 层级一：规则映射引擎
@@ -17,10 +17,22 @@ export class RuleEngine implements IOrganizeEngine {
   readonly name = "规则映射";
   readonly level = EngineLevel.Rules;
 
-  constructor(private rules: OrganizeRule[]) {}
+  private inboxFolder = "";
+
+  constructor(
+    private rules: OrganizeRule[],
+    inboxFolder = ""
+  ) {
+    this.inboxFolder = inboxFolder;
+  }
 
   setRules(rules: OrganizeRule[]): void {
     this.rules = rules;
+  }
+
+  /** 同步 Inbox 文件夹名，供 {inbox} 占位符解析 */
+  setInboxFolder(folder: string): void {
+    this.inboxFolder = folder;
   }
 
   async analyze(
@@ -33,7 +45,7 @@ export class RuleEngine implements IOrganizeEngine {
     for (const rule of this.rules) {
       if (matchRule(rule, title, content, filePath, mtime)) {
         return {
-          suggestedPath: normalizeFolderPath(rule.targetFolder),
+          suggestedPath: resolveRuleTarget(rule.targetFolder, this.inboxFolder),
           confidence: Math.min(1, rule.weight ?? 1),
           reason: `命中规则「${rule.name}」`,
           engine: this.level,
@@ -51,9 +63,10 @@ export class RuleEngine implements IOrganizeEngine {
 
 /**
  * 种子规则集（Seed Rule-set）：全新安装时的默认规则
- * 体现"行为即规则"产品理念——文件名是日期进日志、超过 30 天未修改进归档、
- * 其余情况兜底进收件箱；语义分类交给 custom_rules.json（V0.2）。
- * 用户可一键重新导入。
+ * 体现"行为即规则"产品理念——文件名是日期进日志、其余情况兜底进收件箱；
+ * 语义分类交给 custom_rules.json（V0.2）。用户可一键重新导入。
+ * 兜底目标用 {inbox} 占位符跟随 Inbox 设置；陈旧归档属时间型破坏性规则，
+ * 默认关闭——它在兜底链上会归档所有语义弃权的笔记，需用户显式开启。
  */
 export function defaultRules(): OrganizeRule[] {
   return [
@@ -76,7 +89,7 @@ export function defaultRules(): OrganizeRule[] {
       operator: RuleOperator.OlderThanDays,
       pattern: "30",
       targetFolder: "归档",
-      enabled: true,
+      enabled: false,
     },
     {
       id: "seed-inbox-fallback",
@@ -84,7 +97,7 @@ export function defaultRules(): OrganizeRule[] {
       field: RuleField.Filename,
       operator: RuleOperator.Always,
       pattern: "",
-      targetFolder: "收件箱",
+      targetFolder: "{inbox}",
       enabled: true,
     },
   ];

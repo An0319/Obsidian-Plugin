@@ -10,6 +10,8 @@ export interface OrganizeLogEntry {
   engine: string;
   reason: string;
   mode: "auto" | "manual";
+  /** 条目类型：move = 已移动（旧记录缺省视为 move），refuse = 弃权未移动，undo = 撤销回退 */
+  action?: "move" | "refuse" | "undo";
 }
 
 const LOG_FILE = "organize-log.json";
@@ -166,6 +168,28 @@ export class FileOrganizer {
       engine,
       reason,
       mode,
+      action: "move",
+    });
+  }
+
+  /** 记录一次弃权（引擎拒绝给出建议）：to 为空，携带弃权理由供回溯 */
+  async recordRefusal(
+    file: TFile,
+    from: string,
+    engine: string,
+    reason: string,
+    mode: "auto" | "manual"
+  ): Promise<void> {
+    if (!this.settings.enableLog) return;
+    await this.log.append({
+      time: new Date().toISOString(),
+      file: file.name,
+      from,
+      to: "",
+      engine,
+      reason,
+      mode,
+      action: "refuse",
     });
   }
 }

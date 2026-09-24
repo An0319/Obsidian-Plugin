@@ -44,7 +44,7 @@ export class BatchReportModal extends Modal {
     const section = container.createDiv({ cls: "smart-notes-report-section" });
     section.createEl("h4", { text: t("report.moved", { n: movedEntries.filter((e) => !e.undone).length }) });
 
-    if (undoable.length > 1) {
+    if (undoable.length >= 1) {
       new Setting(section)
         .setName(t("report.undoAll"))
         .setDesc(t("report.undoConfirm", { n: undoable.length }))
@@ -92,7 +92,7 @@ export class BatchReportModal extends Modal {
 
     if (!entry.undone) {
       const actions = row.createDiv({ cls: "smart-notes-report-row-actions" });
-      actions.createEl("button", { cls: "smart-notes-btn smart-notes-btn-ghost", text: t("report.undo") }).addEventListener("click", () => {
+      actions.createEl("button", { cls: "smart-notes-btn", text: t("report.undo") }).addEventListener("click", () => {
         void this.undoOne(entry, container);
       });
     }
@@ -113,6 +113,12 @@ export class BatchReportModal extends Modal {
         text: entry.file,
       });
       const meta = main.createDiv({ cls: "smart-notes-report-row-meta" });
+      if (entry.refused) {
+        meta.createSpan({
+          cls: "smart-notes-badge smart-notes-badge-muted",
+          text: t("report.refused"),
+        });
+      }
       meta.createSpan({ cls: "smart-notes-report-reason", text: `${t("report.keptReason")}：${entry.reason}` });
     }
   }
@@ -140,6 +146,7 @@ export class BatchReportModal extends Modal {
         engine: "undo",
         reason: t("report.undone"),
         mode: "manual",
+        action: "undo",
       });
       new Notice(t("report.undoDone"));
     } catch (err) {
@@ -175,6 +182,7 @@ export class BatchReportModal extends Modal {
           engine: "undo",
           reason: t("report.undone"),
           mode: "manual",
+          action: "undo",
         });
         done++;
       } catch {

@@ -2,8 +2,24 @@ import { describe, expect, it } from "vitest";
 import {
   AutoOrganizeMode,
   DEFAULT_SETTINGS,
+  SmartNotesSettings,
   migrateSettings,
+  migrateLegacySeedRules,
 } from "../src/settings/settings";
+import { defaultRules } from "../src/engines/ruleEngine";
+
+/** 构造老版本用户设置：收件箱兜底硬编码「收件箱」、陈旧归档启用 */
+function legacySettings(): SmartNotesSettings {
+  const settings = migrateSettings({
+    rules: defaultRules().map((r) => {
+      if (r.id === "seed-archive") return { ...r, enabled: true };
+      if (r.id === "seed-inbox-fallback") return { ...r, targetFolder: "收件箱" };
+      return r;
+    }),
+    legacySeedMigrated: false,
+  });
+  return settings;
+}
 
 describe("migrateSettings", () => {
   it("非对象输入返回默认设置", () => {
@@ -75,5 +91,72 @@ describe("migrateSettings", () => {
     expect(result.autoOrganizeMode).toBe(AutoOrganizeMode.Off);
     expect("autoOrganizeMode" in raw).toBe(false);
     expect("autoOrganize" in raw).toBe(true);
+  });
+
+  it("legacySeedMigrated 缺失时回落 false", () => {
+    expect(migrateSettings({}).legacySeedMigrated).toBe(false);
+    expect(migrateSettings({ legacySeedMigrated: "yes" }).legacySeedMigrated).toBe(false);
+    expect(migrateSettings({ legacySeedMigrated: true }).legacySeedMigrated).toBe(true);
+  });
+});
+
+describe("migrateLegacySeedRules", () => {
+  it("老版收件箱兜底目标改写为 {inbox} 占位符", () => {
+    const settings = legacySettings();
+    const { migrated } = migrateLegacySeedRules(settings);
+    const fallback = settings.rules.find((r) => r.id === "seed-inbox-fallback");
+    expect(migrated).toBe(true);
+    expect(fallback?.targetFolder).toBe("{inbox}");
+  });
+
+  it("老版启用的陈旧归档规则被停用并上报 archiveDisabled", () => {
+    const settings = legacySettings();
+    const { migrated, archiveDisabled } = migrateLegacySeedRules(settings);
+    const archive = settings.rules.find((r) => r.id === "seed-archive");
+    expect(migrated).toBe(true);
+    expect(archiveDisabled).toBe(true);
+    expect(archive?.enabled).toBe(false);
+  });
+
+  it("迁移幂等：标记置位后二次调用不再改动", () => {
+    const settings = legacySettings();
+    migrateLegacySeedRules(settings);
+    const archive = settings.rules.find((r) => r.id === "seed-archive");
+    archive!.enabled = true;
+    const second = migrateLegacySeedRules(settings);
+    expect(second.migrated).toBe(false);
+    expect(second.archiveDisabled).toBe(false);
+    expect(archive?.enabled).toBe(true);
+  });
+
+  it("新默认规则已是目标形态：迁移无动作、无提示", () => {
+    const settings = migrateSettings({});
+    const { migrated, archiveDisabled } = migrateLegacySeedRules(settings);
+    expect(migrated).toBe(false);
+    expect(archiveDisabled).toBe(false);
+    const fallback = settings.rules.find((r) => r.id === "seed-inbox-fallback");
+    const archive = settings.rules.find((r) => r.id === "seed-archive");
+    expect(fallback?.targetFolder).toBe("{inbox}");
+    expect(archive?.enabled).toBe(false);
+  });
+
+  it("用户自定义目标不被改写", () => {
+    const settings = migrateSettings({
+      legacySeedMigrated: false,
+      rules: [
+        {
+          id: "seed-inbox-fallback",
+          name: "收件箱兜底",
+          field: "filename",
+          operator: "always",
+          pattern: "",
+          targetFolder: "待处理",
+          enabled: true,
+        },
+      ],
+    });
+    const { migrated } = migrateLegacySeedRules(settings);
+    expect(migrated).toBe(false);
+    expect(settings.rules[0].targetFolder).toBe("待处理");
   });
 });

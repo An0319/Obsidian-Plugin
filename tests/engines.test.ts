@@ -76,6 +76,14 @@ describe("SharedModelEngine", () => {
     const result = await engine.analyze("t", "x", "p");
     expect(result.suggestedPath).toBe("a");
   });
+
+  it("规则目标 {inbox} 占位符解析为设置的 Inbox 名", async () => {
+    const engine = new SharedModelEngine();
+    engine.loadFromJson(configJson.replace("技术/前端", "{inbox}"));
+    engine.setInboxFolder("收集箱");
+    const result = await engine.analyze("t", "聊聊 React 组件", "a.md");
+    expect(result.suggestedPath).toBe("收集箱");
+  });
 });
 
 describe("TfidfEngine", () => {
@@ -120,6 +128,32 @@ describe("TfidfEngine", () => {
       "Inbox/y.md"
     );
     expect(result.suggestedPath).toBe("");
+  });
+
+  it("弃权时携带 top3 诊断与阈值信息", async () => {
+    const engine = new TfidfEngine(() => Promise.resolve(snapshots), {
+      threshold: 0.9,
+    });
+    const result = await engine.analyze(
+      "基金定投",
+      "讨论基金定投与估值判断",
+      "Inbox/z.md"
+    );
+    expect(result.suggestedPath).toBe("");
+    expect(result.reason).toContain("低于阈值 90%");
+    expect(result.reason).toContain("投资");
+    expect(result.diagnostics).toBeDefined();
+    expect(result.diagnostics!.length).toBeGreaterThan(0);
+    expect(result.diagnostics!.length).toBeLessThanOrEqual(3);
+    expect(result.diagnostics![0].folder).toBe("投资");
+    expect(result.diagnostics![0].score).toBeGreaterThan(0);
+    expect(result.diagnostics![0].score).toBeLessThan(0.9);
+    // 诊断按分数降序
+    for (let i = 1; i < result.diagnostics!.length; i++) {
+      expect(result.diagnostics![i].score).toBeLessThanOrEqual(
+        result.diagnostics![i - 1].score
+      );
+    }
   });
 
   it("缓存生效：快照未变化时不重复构建", async () => {
