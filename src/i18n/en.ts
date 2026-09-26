@@ -199,7 +199,7 @@ export const en: Partial<Record<I18nKey, string>> = {
   "general.delayDesc":
     "How long a note must stay untouched before it is filed; editing or renaming resets the timer. All zeros means file immediately",
   "general.delayH": "h",
-  "general.delayM": "m",
+  "general.delayM": "min",
   "general.delayS": "s",
   "general.delayPreset": "Apply preset",
   "general.excluded": "Excluded folders",

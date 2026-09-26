@@ -528,6 +528,15 @@
   min-width: 260px;
 }
 
+/* 列表限高约 4 个条目，超出滚动，避免页面被拉长 */
+.smart-notes-excluded-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 142px;
+  overflow-y: auto;
+}
+
 .smart-notes-excluded-empty {
   color: var(--text-muted);
   font-size: var(--font-ui-smaller);
@@ -566,6 +575,35 @@
 }
 
 .smart-notes-excluded-add-btn {
+  flex: none;
+}
+
+/* ===== 静默期时间框：单位后缀 + 紧凑行距 ===== */
+.smart-notes-delay-setting.setting-item {
+  padding-top: 4px;
+  padding-bottom: 4px;
+}
+
+.smart-notes-delay-setting .setting-item-control {
+  flex-wrap: nowrap;
+  gap: 6px;
+}
+
+.smart-notes-delay-unit {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  width: 84px;
+}
+
+.smart-notes-delay-unit input {
+  width: 100%;
+  min-width: 0;
+}
+
+.smart-notes-delay-unit-suffix {
+  color: var(--text-muted);
+  font-size: var(--font-ui-smaller);
   flex: none;
 }
 

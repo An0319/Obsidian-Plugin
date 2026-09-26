@@ -761,7 +761,8 @@ export class SmartNotesSettingTab extends PluginSettingTab {
     if (settings.autoOrganizeMode !== AutoOrganizeMode.Off) {
       const delaySetting = new Setting(panel)
         .setName(t("general.delay"))
-        .setDesc(t("general.delayDesc"));
+        .setDesc(t("general.delayDesc"))
+        .setClass("smart-notes-delay-setting");
       const clamp = (v: string, max: number) => {
         const n = parseInt(v, 10);
         return Number.isFinite(n) && n > 0 ? Math.min(n, max) : 0;
@@ -773,24 +774,41 @@ export class SmartNotesSettingTab extends PluginSettingTab {
         settings.autoOrganizeDelaySec = clamp(h, 24) * 3600 + clamp(m, 59) * 60 + clamp(s, 59);
         await this.plugin.saveSettings();
       };
-      delaySetting.addText((tx) =>
-        tx.setValue(h).setPlaceholder(t("general.delayH")).onChange((v) => {
-          h = v;
-          void applyDelay();
-        })
-      );
-      delaySetting.addText((tx) =>
-        tx.setValue(m).setPlaceholder(t("general.delayM")).onChange((v) => {
-          m = v;
-          void applyDelay();
-        })
-      );
-      delaySetting.addText((tx) =>
-        tx.setValue(s).setPlaceholder(t("general.delayS")).onChange((v) => {
-          s = v;
-          void applyDelay();
-        })
-      );
+      // 时间框加单位后缀：让用户一眼看懂三个框各是什么单位
+      const attachUnit = (inputEl: HTMLInputElement, unit: string): void => {
+        const wrap = document.createElement("div");
+        wrap.className = "smart-notes-delay-unit";
+        inputEl.parentElement?.insertBefore(wrap, inputEl);
+        wrap.appendChild(inputEl);
+        wrap.createSpan({ cls: "smart-notes-delay-unit-suffix", text: unit });
+      };
+      delaySetting.addText((tx) => {
+        tx.setValue(h)
+          .setPlaceholder("0")
+          .onChange((v) => {
+            h = v;
+            void applyDelay();
+          });
+        attachUnit(tx.inputEl, t("general.delayH"));
+      });
+      delaySetting.addText((tx) => {
+        tx.setValue(m)
+          .setPlaceholder("0")
+          .onChange((v) => {
+            m = v;
+            void applyDelay();
+          });
+        attachUnit(tx.inputEl, t("general.delayM"));
+      });
+      delaySetting.addText((tx) => {
+        tx.setValue(s)
+          .setPlaceholder("0")
+          .onChange((v) => {
+            s = v;
+            void applyDelay();
+          });
+        attachUnit(tx.inputEl, t("general.delayS"));
+      });
       for (const preset of [
         { label: "30s", sec: 30 },
         { label: "2m", sec: 120 },
@@ -832,14 +850,16 @@ export class SmartNotesSettingTab extends PluginSettingTab {
       .setName(t("general.excluded"))
       .setDesc(t("general.excludedDesc"));
     const excludedWrap = excludedSetting.controlEl.createDiv({ cls: "smart-notes-excluded" });
+    // 列表限高滚动：条目多时页面高度保持稳定
+    const chipList = excludedWrap.createDiv({ cls: "smart-notes-excluded-list" });
     if (settings.excludedFolders.length === 0) {
-      excludedWrap.createDiv({
+      chipList.createDiv({
         cls: "smart-notes-excluded-empty",
         text: t("general.excludedEmpty"),
       });
     }
     for (const folder of [...settings.excludedFolders].sort()) {
-      const chip = excludedWrap.createDiv({ cls: "smart-notes-excluded-chip" });
+      const chip = chipList.createDiv({ cls: "smart-notes-excluded-chip" });
       chip.createSpan({ cls: "smart-notes-excluded-chip-path", text: folder });
       const removeBtn = chip.createEl("button", {
         cls: "smart-notes-excluded-chip-remove",
