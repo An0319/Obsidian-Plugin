@@ -391,6 +391,12 @@
   border-top: 1px solid var(--sn-hairline);
 }
 
+.smart-notes-report-empty-hint {
+  color: var(--text-muted);
+  font-size: var(--font-ui-smaller);
+  padding: 8px 0;
+}
+
 .smart-notes-report-row {
   display: flex;
   align-items: center;

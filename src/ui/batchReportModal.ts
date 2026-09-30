@@ -38,7 +38,14 @@ export class BatchReportModal extends Modal {
 
   private renderMovedSection(container: HTMLElement): void {
     const movedEntries = this.entries.filter((e) => e.moved);
-    if (movedEntries.length === 0) return;
+    if (movedEntries.length === 0) {
+      // 0 移动时显式说明：没有可退回的内容，避免用户误以为按钮缺失
+      container.createDiv({
+        cls: "smart-notes-report-empty-hint",
+        text: t("report.noMoves"),
+      });
+      return;
+    }
 
     const undoable = movedEntries.filter((e) => !e.undone);
     const section = container.createDiv({ cls: "smart-notes-report-section" });

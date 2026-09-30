@@ -38,11 +38,42 @@ describe("RuleEngine", () => {
       rule({ id: "fb", operator: RuleOperator.Always, targetFolder: "{inbox}" }),
     ]);
     engine.setInboxFolder("Inbox");
-    const first = await engine.analyze("随便", "内容", "Inbox/a.md");
+    // 文件在 Inbox 之外：兜底目标生效
+    const first = await engine.analyze("随便", "内容", "其他/a.md");
     expect(first.suggestedPath).toBe("Inbox");
     engine.setInboxFolder("收件箱");
-    const second = await engine.analyze("随便", "内容", "Inbox/a.md");
+    const second = await engine.analyze("随便", "内容", "其他/a.md");
     expect(second.suggestedPath).toBe("收件箱");
+  });
+
+  it("自指目标跳过：兜底目标等于当前文件夹时弃权", async () => {
+    const engine = new RuleEngine(
+      [rule({ id: "fb", operator: RuleOperator.Always, targetFolder: "{inbox}" })],
+      "Inbox"
+    );
+    const result = await engine.analyze("随便", "内容", "Inbox/a.md");
+    expect(result.suggestedPath).toBe("");
+    expect(result.reason).toBe("没有命中任何规则");
+  });
+
+  it("自指目标跳过后继续匹配后面的规则", async () => {
+    const engine = new RuleEngine(
+      [
+        rule({ id: "fb", operator: RuleOperator.Always, targetFolder: "{inbox}" }),
+        rule({ id: "r2", pattern: "投资", targetFolder: "投资笔记" }),
+      ],
+      "Inbox"
+    );
+    const result = await engine.analyze("随便", "讲讲投资", "Inbox/a.md");
+    expect(result.suggestedPath).toBe("投资笔记");
+  });
+
+  it("非自指的正常规则不受跳过逻辑影响", async () => {
+    const engine = new RuleEngine([
+      rule({ id: "r1", pattern: "投资", targetFolder: "投资笔记" }),
+    ]);
+    const result = await engine.analyze("随便", "投资相关", "Inbox/a.md");
+    expect(result.suggestedPath).toBe("投资笔记");
   });
 
   it("无占位符的目标不受 Inbox 名影响", async () => {

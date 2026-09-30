@@ -54,12 +54,14 @@ export interface SmartNotesSettings {
   enableLog: boolean;
   /** 一次性迁移标记：0.3.5 种子规则修正（{inbox} 占位符 + 停用陈旧归档）是否已执行 */
   legacySeedMigrated: boolean;
+  /** 一次性迁移标记：0.3.8 智能默认值修正（引擎层级 Rules→Tfidf、阈值 0.3→0.2）是否已执行 */
+  smartEngineMigrated: boolean;
 }
 
 export const DEFAULT_SETTINGS: SmartNotesSettings = {
-  engineLevel: EngineLevel.Rules,
+  engineLevel: EngineLevel.Tfidf,
   rules: defaultRules(),
-  tfidfThreshold: 0.3,
+  tfidfThreshold: 0.2,
   tfidfMaxNotes: 500,
   exemplarNotes: {},
   ollama: {
@@ -82,6 +84,7 @@ export const DEFAULT_SETTINGS: SmartNotesSettings = {
   ignoredExtensions: [".png", ".jpg", ".jpeg", ".gif", ".webp", ".pdf", ".mp4", ".mp3", ".svg"],
   enableLog: true,
   legacySeedMigrated: false,
+  smartEngineMigrated: false,
 };
 
 /**
@@ -116,6 +119,23 @@ export function migrateSettings(raw: unknown): SmartNotesSettings {
   }
   if (typeof merged.legacySeedMigrated !== "boolean") {
     merged.legacySeedMigrated = false;
+  }
+  if (typeof merged.smartEngineMigrated !== "boolean") {
+    merged.smartEngineMigrated = false;
+  }
+  // 0.3.8 一次性智能默认值修正：
+  // 1) 引擎层级 Rules → Tfidf——层级一没有语义匹配，兜底规则自指后会全库罢工；
+  //    用户手动选过层级的（标志位已置）不受影响
+  // 2) 阈值 0.3 → 0.2——深层级小文件夹库实测 0.3 过严，好匹配全部弃权；
+  //    仅当仍是旧默认值时迁移，手动调过的保持不动
+  if (!merged.smartEngineMigrated) {
+    if (merged.engineLevel === EngineLevel.Rules) {
+      merged.engineLevel = EngineLevel.Tfidf;
+    }
+    if (merged.tfidfThreshold === 0.3) {
+      merged.tfidfThreshold = 0.2;
+    }
+    merged.smartEngineMigrated = true;
   }
   // 静默期：非法值回落 0（立即）；范围钳制 0~86400 秒（一天）
   if (typeof merged.autoOrganizeDelaySec !== "number" || !Number.isFinite(merged.autoOrganizeDelaySec)) {

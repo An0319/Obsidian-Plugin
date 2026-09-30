@@ -243,6 +243,7 @@ export const zh = {
   "report.title": "整理报告",
   "report.moved": "已移动 {n} 篇",
   "report.kept": "保留原位 {n} 篇",
+  "report.noMoves": "本次未移动任何笔记，因此没有可退回的内容；保留原因见下方明细",
   "report.keptEmpty": "全部笔记都已归位",
   "report.undo": "退回原位",
   "report.undoAll": "全部退回",

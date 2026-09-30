@@ -98,6 +98,45 @@ describe("migrateSettings", () => {
     expect(migrateSettings({ legacySeedMigrated: "yes" }).legacySeedMigrated).toBe(false);
     expect(migrateSettings({ legacySeedMigrated: true }).legacySeedMigrated).toBe(true);
   });
+
+  it("0.3.8 智能默认值迁移：旧默认层级一与阈值 0.3 一次性升级", () => {
+    const result = migrateSettings({
+      engineLevel: 1,
+      tfidfThreshold: 0.3,
+      smartEngineMigrated: false,
+    });
+    expect(result.engineLevel).toBe(DEFAULT_SETTINGS.engineLevel);
+    expect(result.tfidfThreshold).toBe(0.2);
+    expect(result.smartEngineMigrated).toBe(true);
+  });
+
+  it("0.3.8 迁移尊重用户手动调整过的层级与阈值", () => {
+    const result = migrateSettings({
+      engineLevel: 3,
+      tfidfThreshold: 0.35,
+      smartEngineMigrated: false,
+    });
+    expect(result.engineLevel).toBe(3);
+    expect(result.tfidfThreshold).toBe(0.35);
+  });
+
+  it("0.3.8 迁移幂等：标志位已置则不再改动", () => {
+    const result = migrateSettings({
+      engineLevel: 1,
+      tfidfThreshold: 0.3,
+      smartEngineMigrated: true,
+    });
+    expect(result.engineLevel).toBe(1);
+    expect(result.tfidfThreshold).toBe(0.3);
+  });
+
+  it("smartEngineMigrated 缺失时视为未迁移：迁移执行并置位", () => {
+    // 首次加载即完成一次性迁移
+    expect(migrateSettings({}).smartEngineMigrated).toBe(true);
+    expect(migrateSettings({ smartEngineMigrated: "x" }).smartEngineMigrated).toBe(true);
+    // 已置位则原样保留
+    expect(migrateSettings({ smartEngineMigrated: true }).smartEngineMigrated).toBe(true);
+  });
 });
 
 describe("migrateLegacySeedRules", () => {

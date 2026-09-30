@@ -41,11 +41,18 @@ export class RuleEngine implements IOrganizeEngine {
     filePath: string,
     mtime?: number
   ): Promise<Suggestion> {
+    const idx = filePath.lastIndexOf("/");
+    const currentFolder = idx === -1 ? "" : filePath.slice(0, idx);
     // 按数组顺序（优先级）匹配，命中第一条即返回
     for (const rule of this.rules) {
       if (matchRule(rule, title, content, filePath, mtime)) {
+        const target = resolveRuleTarget(rule.targetFolder, this.inboxFolder);
+        // 自指目标（目标就是笔记当前所在文件夹）：移动等于原地不动，
+        // 视为该规则未产生建议，继续看后面的规则；全部落空则交还上层弃权。
+        // 这修复了「收件箱兜底」吞掉一切并把弃权诊断藏起来的问题。
+        if (target === currentFolder) continue;
         return {
-          suggestedPath: resolveRuleTarget(rule.targetFolder, this.inboxFolder),
+          suggestedPath: target,
           confidence: Math.min(1, rule.weight ?? 1),
           reason: `命中规则「${rule.name}」`,
           engine: this.level,

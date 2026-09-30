@@ -244,6 +244,8 @@ export const en: Partial<Record<I18nKey, string>> = {
   "report.title": "Organizing Report",
   "report.moved": "{n} moved",
   "report.kept": "{n} kept in place",
+  "report.noMoves":
+    "Nothing was moved this run, so there is nothing to undo; see the details below for why notes were kept",
   "report.keptEmpty": "Every note has been filed",
   "report.undo": "Move back",
   "report.undoAll": "Move all back",
